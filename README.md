@@ -2,7 +2,7 @@
 
 > **Laboratorio de pruebas de conocimiento cero (ZK) para billetera digital sobre Stellar.**
 > Enfoque: validación rápida del ecosistema ZK antes de integrarlo en un producto de wallet completo.
-> Estado: Proof of Concept (PoC) — **Tests: 103/103 pasando** | **TypeScript: 0 errores**
+> Estado: Proof of Concept (PoC) — **Tests: 110/110 pasando** | **TypeScript: 0 errores**
 
 ---
 
@@ -39,10 +39,10 @@ LabZK es un laboratorio enfocado exclusivamente en validar el **sistema ZK del e
 | Arquitectura hexagonal (puertos/adaptadores) | ✅ | 13 puertos, 7 adaptadores |
 | API Fastify con validación JSON Schema | ✅ | 8 endpoints |
 | Conexión a Neon (rama `pruebas-zk`) | ✅ | BD aislada de `main` |
-| Estructura Soroban CAP-0074 (BN254) | ✅ | 3 contratos desplegados en testnet |
+| Estructura Soroban CAP-0074 (BN254) | ✅ | 4 contratos desplegados en testnet |
 | **zkLogin → Smart Wallet (Google/Apple)** | ✅ **PASO 1 COMPLETADO** | 7 tests |
 | **Anchor SEP-6/SEP-24 Off-ramp/On-ramp ARS↔USDC** | ✅ **PASO 2 COMPLETADO** | 13 tests |
-| **Tests E2E con contratos reales testnet** | ✅ **PASO 3 COMPLETADO** | 12 tests |
+| **Tests E2E con contratos reales testnet** | ✅ **PASO 3 COMPLETADO** | 19 tests |
 
 ---
 
@@ -67,7 +67,7 @@ El proyecto sigue arquitectura de **puertos y adaptadores** para mantener el dom
 │                   Aplicación (Casos de Uso)                          │
 │  VerifyKycUseCase  AuthenticateUseCase  DepositUseCase               │
 │  TransferPrivateUseCase  WithdrawUseCase  ConvertAssetsUseCase       │
-│  ClaimBalanceUseCase  (SendTransferUseCase pendiente)                │
+│  ClaimBalanceUseCase  SendTransferUseCase                            │
 └──────────────────────────────────┬───────────────────────────────────┘
                                    │
 ┌──────────────────────────────────▼───────────────────────────────────┐
