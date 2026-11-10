@@ -1,5 +1,5 @@
 pragma circom 0.5.46;
-// 
+
 template ProofOfKnowledge() {
     signal input secreto;
     signal input seed;

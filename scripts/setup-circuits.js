@@ -13,19 +13,19 @@
  * En producción se usaría una ceremonia de trusted setup real (multi-partida).
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = __dirname + '/..';
+const ROOT = path.resolve(__dirname, '..');
 const CIRCUITS_DIR = path.join(ROOT, 'circuits');
 const CIRCUIT_NAME = 'proof-of-knowledge';
 const CIRCUIT_FILE = path.join(CIRCUITS_DIR, `${CIRCUIT_NAME}.circom`);
 const PTAU_FILE = path.join(CIRCUITS_DIR, 'powersOfTau28_hez_final_12.ptau');
 
-function sh(cmd) {
-  console.log(`$ ${cmd}`);
-  execSync(cmd, { stdio: 'inherit', cwd: ROOT });
+function sh(cmd, args) {
+  console.log(`$ ${cmd} ${args.join(' ')}`);
+  execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT });
 }
 
 function ensureDir(dir) {
@@ -37,9 +37,7 @@ function main() {
 
   // 1. Compilar circuito Circom
   console.log('\n▶ Compilando circuito Circom...');
-  sh(
-    `npx circom ${CIRCUIT_FILE} --r1cs --wasm --sym -o ${CIRCUITS_DIR}`
-  );
+  sh('npx', ['circom', CIRCUIT_FILE, '--r1cs', '--wasm', '--sym', '-o', CIRCUITS_DIR]);
 
   const r1cs = path.join(CIRCUITS_DIR, `${CIRCUIT_NAME}.r1cs`);
   const wasm = path.join(CIRCUITS_DIR, `${CIRCUIT_NAME}_js`, `${CIRCUIT_NAME}.wasm`);
@@ -47,23 +45,18 @@ function main() {
   // 2. Descargar powersOfTau si no existe (ceremonia de fase 1 preexistente)
   if (!fs.existsSync(PTAU_FILE)) {
     console.log('\n▶ Descargando powersOfTau (fase 1 de trusted setup)...');
-    sh(
-      `snarkjs powersoftau download powersOfTau28_hez_final_12 ${PTAU_FILE}`
-    );
+    sh('snarkjs', ['powersoftau', 'download', 'powersOfTau28_hez_final_12', PTAU_FILE]);
   }
 
   // 3. Trusted setup fase 2 (específico del circuito)
   const zkey = path.join(CIRCUITS_DIR, `${CIRCUIT_NAME}_0000.zkey`);
   console.log('\n▶ Ejecutando trusted setup fase 2 (groth16 setup)...');
-  sh(`snarkjs groth16 setup ${r1cs} ${PTAU_FILE} ${zkey}`);
+  sh('snarkjs', ['groth16', 'setup', r1cs, PTAU_FILE, zkey]);
 
   // 4. Exportar verification key (JSON, para verificación off-chain y Soroban)
   const vkey = path.join(CIRCUITS_DIR, 'verification_key.json');
   console.log('\n▶ Exportando verification key...');
-  sh(`snarkjs zkey export verificationkey ${zkey} ${vkey}`);
-
-  // 5. Exportar solidity verifier (referencia, opcional)
-  // sh(`snarkjs zkey export solidityverifier ${zkey} ${path.join(CIRCUITS_DIR, 'Verifier.sol')}`);
+  sh('snarkjs', ['zkey', 'export', 'verificationkey', zkey, vkey]);
 
   console.log('\n✅ Setup completo. Artefactos en circuits/:');
   console.log(`   - ${CIRCUIT_NAME}.r1cs`);
