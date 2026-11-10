@@ -30,6 +30,7 @@ const CONTRACTS = {
 
 const RPC_URL = 'https://soroban-testnet.stellar.org';
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
+const NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
 
 // Mock del SDK de zkLogin para evitar dependencia de OAuth real
 jest.mock('@stellar-zklogin/sdk', () => ({
