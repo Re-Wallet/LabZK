@@ -1,0 +1,1 @@
+/datos/lordbitcoin/Projects/Projects\ Web3/ReWallet/LabZK/contracts/zk_verifier/target/wasm32v1-none/release/zk_verifier.wasm: /datos/lordbitcoin/Projects/Projects\ Web3/ReWallet/LabZK/contracts/zk_verifier/src/lib.rs

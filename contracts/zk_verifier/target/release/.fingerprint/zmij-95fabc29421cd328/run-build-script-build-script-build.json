@@ -1,0 +1,1 @@
+{"rustc":8022303366561187541,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[16226529040278277557,"build_script_build",false,9099529749227078993]],"local":[{"RerunIfChanged":{"output":"release/build/zmij-95fabc29421cd328/output","paths":["build.rs"]}}],"rustflags":[],"config":0,"compile_kind":0}
