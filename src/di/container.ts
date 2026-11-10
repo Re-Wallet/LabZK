@@ -12,6 +12,9 @@ import { createPool, type DatabaseConfig } from '../infrastructure/persistence/p
 import { PostgresNullifierRepository } from '../infrastructure/persistence/postgresql/nullifier.repository.js';
 import { PostgresCommitmentRepository } from '../infrastructure/persistence/postgresql/commitment.repository.js';
 import { PostgresUserRepository } from '../infrastructure/persistence/postgresql/user.repository.js';
+import { PostgresWalletRepository } from '../infrastructure/persistence/postgresql/wallet.repository.js';
+import { PostgresTransferRepository } from '../infrastructure/persistence/postgresql/transfer.repository.js';
+import { PostgresLedgerRepository } from '../infrastructure/persistence/postgresql/ledger.repository.js';
 import { KakushoAdapter } from '../infrastructure/adapters/kyc-verifier/kakusho.adapter.js';
 import { PiiloAdapter } from '../infrastructure/adapters/privacy/piilo.adapter.js';
 import { AtreusAdapter } from '../infrastructure/adapters/payment-link/atreus.adapter.js';
@@ -103,6 +106,9 @@ export function createContainer(config: AppConfig): Container {
   const nullifierRepo = new PostgresNullifierRepository(pool);
   const commitmentRepo = new PostgresCommitmentRepository(pool);
   const userRepo = new PostgresUserRepository(pool);
+  const walletRepo = new PostgresWalletRepository(pool);
+  const transferRepo = new PostgresTransferRepository(pool);
+  const ledgerRepo = new PostgresLedgerRepository(pool);
 
   const kakushoAdapter = new KakushoAdapter(nullifierRepo);
   const piiloAdapter = new PiiloAdapter(config.piilo);
@@ -144,7 +150,7 @@ export function createContainer(config: AppConfig): Container {
   const depositUseCase = new DepositUseCase(piiloAdapter);
   const transferPrivateUseCase = new TransferPrivateUseCase(piiloAdapter);
   const withdrawUseCase = new WithdrawUseCase(piiloAdapter);
-  const sendTransferUseCase = null as unknown as SendTransferUseCase;
+  const sendTransferUseCase = new SendTransferUseCase(walletRepo, ledgerRepo, transferRepo);
   const convertAssetsUseCase = new ConvertAssetsUseCase(stellarPathAdapter);
   const claimBalanceUseCase = new ClaimBalanceUseCase(userRepo);
 

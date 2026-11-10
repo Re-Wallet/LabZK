@@ -1,16 +1,18 @@
 /**
  * application/transfer/send-transfer.use-case.ts
  *
- * Caso de uso: Envío de transferencia (con idempotencia).
+ * Caso de uso: Envío de transferencia (con idempotencia y doble entrada contable).
  *
  * Invariantes:
  *   - El destinatario NO existe hasta el reclamo (no se crea fila en users).
  *   - idempotency_key previene duplicación.
- *   - Doble asiento con suma cero en el ledger.
+ *   - Doble asiento con suma cero en el ledger (débito = crédito).
+ *   - fromUserId debe existir (usuario autenticado).
  */
 
 import type { WalletRepository } from '../../domain/ports/wallet.repository.js';
 import type { LedgerRepository } from '../../domain/ports/ledger.repository.js';
+import type { TransferRepository } from '../../domain/ports/transfer.repository.js';
 import type { Transfer } from '../../domain/entities/transfer.entity.js';
 import type { LedgerEntry } from '../../domain/entities/ledger-entry.entity.js';
 
@@ -25,49 +27,63 @@ export interface SendTransferInput {
 export class SendTransferUseCase {
   constructor(
     private readonly walletRepo: WalletRepository,
-    private readonly ledgerRepo: LedgerRepository
+    private readonly ledgerRepo: LedgerRepository,
+    private readonly transferRepo: TransferRepository
   ) {}
 
   async execute(input: SendTransferInput): Promise<Transfer> {
-    // TODO: Verificar idempotency_key antes de crear la transferencia
-    // TODO: Crear transferencia con estado 'pending'
-    // TODO: Crear asientos de ledger (débito + crédito, suma cero)
-    // TODO: Si el destinatario no existe, no crear fila en users (reclamable después)
+    // 1. Verificar idempotency_key (no permitir duplicados)
+    const existing = await this.transferRepo.findByIdempotencyKey(input.idempotencyKey);
+    if (existing) {
+      throw new Error(`Transfer with idempotency key already exists: ${input.idempotencyKey}`);
+    }
 
+    // 2. Verificar que el emisor existe (usuario autenticado)
+    const sender = await this.walletRepo.findByUserId(input.fromUserId);
+    if (!sender) {
+      throw new Error(`Sender not found: ${input.fromUserId}`);
+    }
+
+    // 3. Crear transferencia con estado 'pending'
+    const now = Date.now();
     const transfer: Transfer = {
-      id: `tx_${Date.now()}`,
+      id: `tx_${now}`,
       idempotencyKey: input.idempotencyKey,
       fromUserId: input.fromUserId,
       toTag: input.toTag,
       amount: input.amount,
       asset: input.asset,
       status: 'pending',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     };
 
-    // Asiento de débito (emisor)
+    // 4. Guardar la transferencia
+    await this.transferRepo.save(transfer);
+
+    // 5. Asiento de débito (emisor)
     const debitEntry: LedgerEntry = {
-      id: `entry_${Date.now()}_1`,
+      id: `entry_${now}_1`,
       transferId: transfer.id,
       type: 'debit',
       amount: input.amount,
       asset: input.asset,
       account: input.fromUserId,
-      createdAt: Date.now(),
+      createdAt: now,
     };
 
-    // Asiento de crédito (destinatario — pendiente de reclamo)
+    // 6. Asiento de crédito (destinatario — pendiente de reclamo)
     const creditEntry: LedgerEntry = {
-      id: `entry_${Date.now()}_2`,
+      id: `entry_${now}_2`,
       transferId: transfer.id,
       type: 'credit',
       amount: input.amount,
       asset: input.asset,
       account: input.toTag,
-      createdAt: Date.now(),
+      createdAt: now,
     };
 
+    // 7. Guardar ambos asientos (doble entrada, suma cero)
     await this.ledgerRepo.saveEntry(debitEntry);
     await this.ledgerRepo.saveEntry(creditEntry);
 
