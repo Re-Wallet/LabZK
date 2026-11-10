@@ -472,11 +472,10 @@ npm run dev
 
 ### Limitaciones actuales del PoC
 
-1. **Circom no compilado**: El parser de circom 0.5.x tiene un bug que ignora newlines tras `pragma`. Se usa modo simulado estructuralmente correcto hasta tener artefactos reales (`.wasm`, `.zkey`, `verification_key.json`).
-2. **Verificación on-chain no desplegada completamente**: Los clientes Soroban (`Groth16VerifierClient`, `KycRegistryClient`) conectan a contratos desplegados en testnet pero el KYC Registry no está desplegado.
-3. **SDKs ZK**: `@neylanxyz/piilo` no está instalado (mock en tests). `@stellar-zklogin/sdk` v2.0.0 sí está instalado y funcionando.
-4. **Pruebas ZK simuladas**: Los tests ZK usan un modo simulado con hash SHA-256 como sustituto de Poseidon. Para verificación criptográfica completa se requiere el vkey de Circom.
-5. **SendTransferUseCase**: No implementado (placeholder `null` en container). Pendiente para fase posterior.
+1. **Circom no compilado**: El parser de circom 0.5.x tiene un bug que ignora newlines tras `pragma`. Se usa modo simulado estructuralmente correcto hasta tener artefactos reales (`.wasm`, `.zkey`, `verification_key.json`). **Parcialmente resuelto**: `verification_key.json` generado con `snarkjs` pero el zkey requiere verificación adicional.
+2. **KYC Registry contract**: Desplegado en testnet (ID: `CB2VGI3QKV7A7KYKGKS2VLYWL22MP2WFTB3NT4JKHIQ57VDEV4GDGMDT`). Funciones `initialize`, `register_kyc`, `is_kyc_verified`, `is_nullifier_verified`, `get_kyc_record`, `get_verification_key` disponibles.
+3. **SDKs ZK**: `@stellar-zklogin/sdk` v2.0.0 instalado y funcionando. `@neylanxyz/piilo` instalado pero requiere wallet configurada para uso real.
+4. **Pruebas ZK simuladas**: Los tests ZK usan un modo simulado con hash SHA-256 como sustituto de Poseidon. Para verificación criptográfica completa se requiere el vkey de Circom generado (disponible en `circuits/verification_key.json`).
 
 ### Datos sensibles
 
@@ -489,13 +488,11 @@ npm run dev
 
 ## 📈 Próximos Pasos
 
-1. **Compilar circom**: Instalar cmake y compilar el circuito para obtener `verification_key.json` real
-2. **Desplegar KYC Registry contract**: Contrato `kyc_registry` pendiente de despliegue en testnet
-3. **Instalar @neylanxyz/piilo**: SDK real para privacidad de montos
-4. **Implementar SendTransferUseCase**: Transferencia estándar pendiente
-5. **Contract tests reales**: Ejecutar contra testnet con credenciales OAuth reales (no mocks)
-6. **E2E semanal**: Ejecutar contra testnet (no en cada PR)
-7. **Auditoría de seguridad**: Antes de usar con fondos reales
+1. **Auditoría de seguridad**: Revisar contratos Soroban y manejo de claves antes de usar con fondos reales
+2. **Tests E2E con credenciales OAuth reales**: Ejecutar contra testnet con `ZKLOGIN_GOOGLE_CLIENT_ID` y `ZKLOGIN_APPLE_CLIENT_ID` reales (actualmente mockeados)
+3. **Tests E2E semanales**: Configurar GitHub Actions para ejecutar contra testnet (no en cada PR)
+4. **SendTransferUseCase en producción**: Verificar con transacciones reales de USDC en testnet
+5. **KYC Registry en flujo completo**: Integrar `register_kyc` en el flujo de verificación de Kakusho
 
 ---
 
@@ -505,4 +502,4 @@ MIT. Véase LICENSE para más detalles.
 
 ---
 
-*Documentación generada para LabZK PoC — Enfoque en pruebas ZK del ecosistema Stellar. Última actualización: implementados los 3 pasos principales (zkLogin Smart Wallet, Anchor SEP-6/24, Tests E2E con contratos reales).*
+*Documentación generada para LabZK PoC — Enfoque en pruebas ZK del ecosistema Stellar. Última actualización: todos los 3 pasos principales implementados, contratos desplegados en testnet, transacción firmada real enviada.*
