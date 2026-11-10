@@ -10,3 +10,4 @@ circuits/*.json
 .coverage/
 .DS_Store
 circuits/*.sym
+proof-of-knowledge.sym
