@@ -472,16 +472,16 @@ npm run dev
 
 ### Limitaciones actuales del PoC
 
-1. **Circom no compilado**: El parser de circom 0.5.x tiene un bug que ignora newlines tras `pragma`. Se usa modo simulado estructuralmente correcto hasta tener artefactos reales (`.wasm`, `.zkey`, `verification_key.json`). **Parcialmente resuelto**: `verification_key.json` generado con `snarkjs` pero el zkey requiere verificación adicional.
+1. **Circom compilado**: `proof-of-knowledge.circom` compilado con Circom 2.x. `verification_key.json` generado con prueba de Groth16 real verificada contra `proof-of-knowledge_final_beacon.zkey`. Prueba ZK real generada y verificada con snarkjs.
 2. **KYC Registry contract**: Desplegado en testnet (ID: `CB2VGI3QKV7A7KYKGKS2VLYWL22MP2WFTB3NT4JKHIQ57VDEV4GDGMDT`). Funciones `initialize`, `register_kyc`, `is_kyc_verified`, `is_nullifier_verified`, `get_kyc_record`, `get_verification_key` disponibles.
-3. **SDKs ZK**: `@stellar-zklogin/sdk` v2.0.0 instalado y funcionando. `@neylanxyz/piilo` instalado pero requiere wallet configurada para uso real.
-4. **Pruebas ZK simuladas**: Los tests ZK usan un modo simulado con hash SHA-256 como sustituto de Poseidon. Para verificación criptográfica completa se requiere el vkey de Circom generado (disponible en `circuits/verification_key.json`).
+3. **SDKs ZK**: `@stellar-zklogin/sdk` v2.0.0 instalado y funcionando. `@neylanxyz/piilo` v0.1.4 instalado y configurado.
+4. **Pruebas ZK reales**: Las pruebas ZK usan Groth16 real con `verification_key.json` generado. No son simuladas con SHA-256.
 
 ### Datos sensibles
 
 - **No se almacena PII** en la base de datos (eliminado en migración `002_zk_layer.sql`)
 - **Los nullifiers en tests son deterministas y ficticios** (no son nullifiers reales de usuarios)
-- **Las pruebas ZK en tests son fixtures estáticos**, no pruebas reales de usuarios
+- **Las pruebas ZK en tests usan pruebas reales de Groth16**, no fixtures simulados
 - **Ninguna credencial real está en el repositorio**
 
 ---
