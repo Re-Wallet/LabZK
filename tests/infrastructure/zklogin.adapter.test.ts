@@ -15,6 +15,11 @@
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { ZkLoginAdapter } from '../../src/infrastructure/adapters/auth/zklogin.adapter';
+import { createWallet } from '@stellar-zklogin/sdk';
+
+jest.mock('@stellar-zklogin/sdk', () => ({
+  createWallet: jest.fn(),
+}));
 
 describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
   let adapter: ZkLoginAdapter;
@@ -22,11 +27,13 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
 
   beforeEach(() => {
     mockCreateWallet = jest.fn(() => ({
+      connect: jest.fn<any>().mockResolvedValue({ address: 'GAAAA...address' }),
       getAddress: jest.fn<any>().mockReturnValue('GAAAA...address'),
       isActive: jest.fn<any>().mockResolvedValue(true as any),
       signTransaction: jest.fn<any>().mockResolvedValue('signed-xdr' as any),
     }));
-    adapter = new ZkLoginAdapter(mockCreateWallet, 'LabZK', {
+    (createWallet as jest.Mock).mockImplementation((config) => mockCreateWallet(config));
+    adapter = new ZkLoginAdapter('LabZK', {
       google: 'google-client-id',
       apple: 'apple-client-id',
     });
@@ -56,7 +63,7 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
   });
 
   it('sin client ID configurado → error', async () => {
-    const adapterNoClient = new ZkLoginAdapter(mockCreateWallet, 'LabZK', {
+    const adapterNoClient = new ZkLoginAdapter('LabZK', {
       google: undefined as any,
     });
 

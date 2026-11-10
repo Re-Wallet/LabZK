@@ -3,20 +3,19 @@
  *
  * Cliente para verificación on-chain de pruebas Groth16 en Soroban (CAP-0074 BN254).
  *
- * ESTE ES UN PLACEHOLDER ESTRUCTURAL. Cuando circom compile y se genere el
- * verification_key.json, se desplegará el contrato verificador y este cliente
- * se conectará a él.
- *
  * Primitive on-chain disponibles (Protocol 25+, CAP-0074):
  *   - bn254_g1_add
  *   - bn254_g1_mul
  *   - bn254_multi_pairing_check
  *
- * Para usar esto en producción:
- *   1. Compilar circuito Circom → .r1cs + .wasm + .zkey
+ * Para usar en producción:
+ *   1. Compilar circuito Circom → .r1cs + .wasm + .zkey (requiere cmake, pendiente)
  *   2. Exportar verification_key.json
  *   3. Desplegar contrato verificador Soroban (stellar-zk)
- *   4. Conectar este cliente al contractId desplegado
+ *   4. Configurar contractId, rpcUrl, networkPassphrase y verificationKeyHash
+ *
+ * Cuando se disponga de las credenciales y el contrato desplegado, descomentar
+ * la implementación con @stellar/stellar-sdk.
  */
 
 import type {
@@ -32,15 +31,23 @@ export class Groth16VerifierClient {
 
   constructor(config: SorobanVerifierConfig) {
     this.config = config;
-    // isReady = true solo cuando hay un contractId desplegado y vkey disponible
-    this.isReady = Boolean(config.contractId && config.verificationKeyHash);
+    // isReady = true solo cuando hay contractId y verificationKeyHash configurados
+    this.isReady = Boolean(
+      config.contractId &&
+        config.verificationKeyHash &&
+        config.rpcUrl &&
+        config.networkPassphrase
+    );
   }
 
   /**
    * Verifica una prueba Groth16 on-chain a través del contrato Soroban.
    *
-   * Retorna { valid: true/false, txHash } si el contrato responde.
-   * Retorna { valid: false, error } si el cliente no está listo (sin contrato desplegado).
+   * Cuando el contrato esté desplegado y configurado, esta implementación
+   * usará @stellar/stellar-sdk para llamar a la función verify del contrato.
+   *
+   * @returns { valid: true/false, txHash } si el contrato responde
+   * @returns { valid: false, error } si el cliente no está listo
    */
   async verify(
     proof: Groth16ProofSoroban,
@@ -51,19 +58,15 @@ export class Groth16VerifierClient {
         valid: false,
         nullifier: publicInputs.nullifier,
         error:
-          'Contrato verificador Soroban no desplegado. Compila circom, despliega el contrato verificador y configura contractId.',
+          'Contrato verificador Soroban no desplegado. Requiere: contractId, verificationKeyHash, rpcUrl, networkPassphrase. Compila circom, despliega el contrato verificador y configura estas variables.',
       };
     }
 
-    // TODO: Cuando se disponga del contrato Soroban desplegado, usar @stellar/stellar-sdk
-    // para llamar a la función verify del contrato con:
-    //   - proof (serializada como bytes)
-    //   - publicInputs ([nullifier, seed])
-    //   - verification key (para verificar la pairing)
-    //
+    // TODO: Implementar con @stellar/stellar-sdk cuando se disponga del contrato desplegado
     // Ejemplo conceptual:
-    // const contract = new Contract(this.config.contractId, Groth16Verifier.abi, this.provider);
-    // const result = await contract.verify(proof, publicInputs);
+    // import { Contract, Networks, StrKey } from '@stellar/stellar-sdk'
+    // const contract = new Contract(this.config.contractId, Groth16Verifier.abi, this.provider)
+    // const result = await contract.verify(proof, publicInputs)
 
     throw new Error('Groth16VerifierClient: contrato Soroban no implementado aún');
   }
@@ -73,5 +76,12 @@ export class Groth16VerifierClient {
    */
   isReadyToVerify(): boolean {
     return this.isReady;
+  }
+
+  /**
+   * Obtiene la configuración actual (para debugging).
+   */
+  getConfig(): SorobanVerifierConfig {
+    return { ...this.config };
   }
 }

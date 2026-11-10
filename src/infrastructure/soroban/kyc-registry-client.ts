@@ -11,6 +11,10 @@
  *   2. Backend recibe nullifier + prueba
  *   3. Backend llama a kyc_registry.verify(proof, publicInputs) on-chain
  *   4. Si es válido, se registra el nullifier (anti-replay)
+ *
+ * Para usar en producción:
+ *   1. Desplegar contrato kyc_registry en Soroban testnet
+ *   2. Configurar contractId, rpcUrl, networkPassphrase
  */
 
 import type { Groth16ProofSoroban, Groth16PublicInputs } from './types.js';
@@ -27,7 +31,7 @@ export class KycRegistryClient {
 
   constructor(config: KycRegistryConfig) {
     this.config = config;
-    this.isReady = Boolean(config.contractId);
+    this.isReady = Boolean(config.contractId && config.rpcUrl && config.networkPassphrase);
   }
 
   /**
@@ -41,11 +45,11 @@ export class KycRegistryClient {
     if (!this.isReady) {
       return {
         verified: false,
-        error: 'Contrato kyc_registry no desplegado en Soroban',
+        error: 'Contrato kyc_registry no desplegado en Soroban. Requiere contractId, rpcUrl, networkPassphrase.',
       };
     }
 
-    // TODO: Conectar al contrato kyc_registry desplegado
+    // TODO: Conectar al contrato kyc_registry desplegado con @stellar/stellar-sdk
     throw new Error('KycRegistryClient: contrato no implementado aún');
   }
 
@@ -58,7 +62,17 @@ export class KycRegistryClient {
     return false;
   }
 
+  /**
+   * Verifica si el cliente está listo para verificar on-chain.
+   */
   isReadyToVerify(): boolean {
     return this.isReady;
+  }
+
+  /**
+   * Obtiene la configuración actual (para debugging).
+   */
+  getConfig(): KycRegistryConfig {
+    return { ...this.config };
   }
 }

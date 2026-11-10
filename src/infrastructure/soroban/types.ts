@@ -3,9 +3,12 @@
  *
  * Tipos para la verificación on-chain de pruebas ZK en Soroban (CAP-0074 BN254).
  *
- * Cuando circom compile y se genere el verification_key.json, estos tipos
- * se usarán para serializar las pruebas Groth16 y enviarlas al contrato
- * verificador de Soroban.
+ * Variables de entorno requeridas para conectar al contrato desplegado:
+ *   SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+ *   SOROBAN_NETWORK_PASSPHRASE=Testnet SDF Network ; September 2015
+ *   SOROBAN_VERIFIER_CONTRACT_ID=CA... (contrato desplegado)
+ *   SOROBAN_VERIFICATION_KEY_HASH=... (hash del vkey de Circom)
+ *   SOROBAN_KYC_REGISTRY_CONTRACT_ID=CA... (contrato kyc_registry desplegado)
  */
 
 export type G1Point = [string, string];   // [x, y] big-endian 32 bytes cada uno

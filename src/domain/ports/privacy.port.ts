@@ -47,5 +47,5 @@ export interface PrivacyPort {
   /**
    * Obtiene el balance local (plaintext, solo el dueño lo ve).
    */
-  getBalance(): bigint;
+  getBalance(): Promise<bigint>;
 }

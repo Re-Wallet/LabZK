@@ -1,16 +1,21 @@
 /**
  * infrastructure/adapters/privacy/piilo.adapter.ts
  *
- * Adaptador: Piilo (@neylanxyz/piilo).
+ * Adaptador: Piilo (@neylanxyz/piilo v0.1.4).
  * Implementa PrivacyPort (fase 1: confidencialidad de montos).
  *
- * API oficial (v0.1.4):
+ * API oficial documentada (npm registry):
  *   import { Piilo } from '@neylanxyz/piilo'
- *   const piilo = new Piilo({ network: 'testnet', asset: 'USDC', wallet })
+ *   const piilo = new Piilo({
+ *     network: 'testnet',
+ *     asset:   'USDC',    // o 'XLM' — resuelve contrato del on-chain registry
+ *     wallet,             // WalletAdapter & WalletSigner
+ *   })
  *   await piilo.deposit(50_000_000n)          // 5 XLM en stroops
  *   await piilo.transfer({ to: 'G…', amount: 20_000_000n })
- *   await piilo.settleIfPending()
- *   await piilo.withdraw()
+ *   await piilo.settleIfPending()             // receive incoming transfers
+ *   await piilo.withdraw()                    // exit privacy, receive XLM back
+ *   piilo.getBalance()                        // local plaintext balance
  *
  * Criptografía: Pedersen commitments en JubJub (BLS12-381) + Groth16 ZK proofs.
  * Direcciones públicas (AML/KYC), montos ocultos.
@@ -19,53 +24,42 @@
  */
 
 import type { PrivacyPort, PrivacyResult } from '../../../domain/ports/privacy.port.js';
+import { Piilo } from '@neylanxyz/piilo';
 
-type PiiloWallet = {
+/**
+ * Tipo interno para el wallet de Piilo.
+ * El SDK espera WalletAdapter & WalletSigner con signMessage retornando Uint8Array.
+ * Usamos cualquier tipo compatible internamente; el cast se hace al pasar al SDK.
+ */
+type PiiloWalletInput = {
   publicKey(): Promise<string>;
   signTransaction(xdr: string): Promise<string>;
-  signMessage(message: string): Promise<{ signature: string }>;
-};
-
-type PiiloSDK = {
-  new (config: {
-    network: 'testnet' | 'mainnet';
-    asset?: string;
-    contractId?: string;
-    wallet?: PiiloWallet;
-    circuitsUrl?: string;
-  }): PiiloInstance;
-};
-
-type PiiloInstance = {
-  deposit(amount: bigint): Promise<void>;
-  transfer({ to, amount }: { to: string; amount: bigint }): Promise<void>;
-  settleIfPending(): Promise<{ received: bigint } | null>;
-  withdraw(): Promise<void>;
-  getBalance(): bigint;
-  getAccount(address: string): Promise<unknown>;
-  exportBackup(): string;
-  importBackup(json: string): void;
+  signMessage(message: string): Promise<{ signature: Uint8Array }>;
 };
 
 export class PiiloAdapter implements PrivacyPort {
-  private piilo: PiiloInstance | null = null;
+  private piilo: InstanceType<typeof Piilo> | null = null;
 
   constructor(
-    private readonly PiiloSDK: PiiloSDK,
     private readonly config: {
       network: 'testnet' | 'mainnet';
       asset: string;
-      wallet?: PiiloWallet;
+      wallet?: PiiloWalletInput;
       circuitsUrl?: string;
     }
   ) {}
 
-  private ensureInitialized(): PiiloInstance {
+  private ensureInitialized(): InstanceType<typeof Piilo> {
     if (!this.piilo) {
-      this.piilo = new this.PiiloSDK({
+      if (!this.config.wallet) {
+        throw new Error(
+          'Piilo wallet no configurado. Proporciona una wallet compatible con PiiloWalletInput.'
+        );
+      }
+      this.piilo = new Piilo({
         network: this.config.network,
         asset: this.config.asset,
-        wallet: this.config.wallet,
+        wallet: this.config.wallet as any,
         circuitsUrl: this.config.circuitsUrl,
       });
     }
@@ -83,7 +77,7 @@ export class PiiloAdapter implements PrivacyPort {
 
   async transferPrivate(input: { to: string; amount: bigint }): Promise<PrivacyResult> {
     try {
-      // Piilo genera la prueba Groth16 client-side (~2-5s)
+      // Piilo genera la prueba Groth16 client-side (~2–5s)
       await this.ensureInitialized().transfer({ to: input.to, amount: input.amount });
       return { success: true };
     } catch (err) {
@@ -104,7 +98,7 @@ export class PiiloAdapter implements PrivacyPort {
     }
   }
 
-  getBalance(): bigint {
+  async getBalance(): Promise<bigint> {
     return this.ensureInitialized().getBalance();
   }
 }

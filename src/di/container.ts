@@ -97,25 +97,12 @@ export function createContainer(config: AppConfig): Container {
   // para verificar y registrar nullifiers en la tabla zk_nullifiers de Neon.
   const kakushoAdapter = new KakushoAdapter(nullifierRepo);
 
-  const piiloAdapter = new PiiloAdapter(
-    // PiiloSDK se inyecta como clase cuando se instale @neylanxyz/piilo
-    // Por ahora usamos un placeholder que lanza error si se usa sin SDK real
-    class {
-      constructor() {
-        throw new Error('@neylanxyz/piilo SDK no instalado. Ejecuta: npm install @neylanxyz/piilo');
-      }
-    } as any,
-    config.piilo
-  );
+  const piiloAdapter = new PiiloAdapter(config.piilo);
 
   const atreusAdapter = new AtreusAdapter();
   const anchorAdapter = new AnchorAdapter();
   const stellarPathAdapter = new StellarPathAdapter(config.horizonUrl);
   const zkloginAdapter = new ZkLoginAdapter(
-    (cfg: { appName: string; oauthClients: { google?: string; apple?: string } }) => {
-      // Placeholder: se conecta al SDK real @stellar-zklogin/sdk cuando esté instalado
-      throw new Error('@stellar-zklogin/sdk no instalado. Ejecuta: npm install @stellar-zklogin/sdk');
-    },
     config.zklogin.appName,
     config.zklogin.oauthClients
   );
