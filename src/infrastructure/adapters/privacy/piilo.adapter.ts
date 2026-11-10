@@ -31,7 +31,7 @@ type PiiloSDK = {
     network: 'testnet' | 'mainnet';
     asset?: string;
     contractId?: string;
-    wallet: PiiloWallet;
+    wallet?: PiiloWallet;
     circuitsUrl?: string;
   }): PiiloInstance;
 };
@@ -55,7 +55,7 @@ export class PiiloAdapter implements PrivacyPort {
     private readonly config: {
       network: 'testnet' | 'mainnet';
       asset: string;
-      wallet: PiiloWallet;
+      wallet?: PiiloWallet;
       circuitsUrl?: string;
     }
   ) {}
