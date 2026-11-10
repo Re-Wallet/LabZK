@@ -2,7 +2,7 @@
 
 ## Resumen
 
-Este documento contiene evidencia de una transacción real firmada en Stellar Testnet, ejecutada el **2026-11-10**.
+Este documento contiene evidencia de una transacción real firmada y enviada a Stellar Testnet, ejecutada el **2026-11-10**.
 
 ## Cuenta creada y financiada vía Friendbot
 
@@ -11,8 +11,7 @@ El Friendbot de Stellar Testnet confirmó la creación y financiación de una cu
 ```json
 {
   "successful": true,
-  "hash": "40c544f37350e45fac37af04a9d10d6e3c34edc51ea6b767cd82b9abaa21ed51",
-  "envelope_xdr": "AAAAAgAAAACV/szSNETc9kvzdtE5j1V3TjI3wYnXjCWsf87z280TTQAPQkAAVISsAAAANQAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAABAAAAABB90WssODNIgi6BHveqzxTRmIpvAFRyVNM+Hm2GVuCcAAAAAAAAAACi+TCq6+6Rhg7apZxKFpJyWE49Pos86UmxyJBkxyNLNgAAABdIdugAAAAAAAAAAALbzRNNAAAAQIUXQNd6GwOjjhW88ZlS6g3PWDR9Lkdj3YnKiF6c4XTdgKTPO+BqSfOBkbZDolBljQxm2RBNRW3d5lqU2BbXbgOGVuCcAAAAQBzKW9ug1UK/zn0WupgRcY/9sSQ4vQMh/qnLiJhNrzXEbS4gp2U85RYhks/FxHBjGvnH+9bzbq0KG952XXa2sgA="
+  "hash": "bcc74e4da94fbfbf42593d2e9722dc6b906683f4103613fab38337d83aa152f4"
 }
 ```
 
@@ -20,14 +19,32 @@ El Friendbot de Stellar Testnet confirmó la creación y financiación de una cu
 
 | Campo | Valor |
 |-------|-------|
-| Public key | `GC4PFGTD4KPEOQ3BWTAHIN7432FZIKIOWHPM3L6BNERDDUIOEGKXBZDH` |
-| Secret key | `SDWO3WD4KQMYRG3GQVPEUR7VXCZWIW4LXA47TOZI5F2L37TJ4UTQTXED` |
-| Friendbot hash | `40c544f37350e45fac37af04a9d10d6e3c34edc51ea6b767cd82b9abaa21ed51` |
+| Public key | `GBLGPZY7QEVKUSKGOOPUKCMW7JMQ2HMAPUB7F27MMJITOQ2VC3FPID6H` |
+| Secret key | `SAXXV4FMVDDXNPMH4KT4VGWCW3LSNXQ3J63XSHSJ6KSOYRN3RZE7RR2M` |
+| Friendbot hash | `bcc74e4da94fbfbf42593d2e9722dc6b906683f4103613fab38337d83aa152f4` |
 | Friendbot exitoso | `true` |
+| Sequence number | `24328979687145472` |
+
+## Transacción firmada real (Manage Data)
+
+Se construyó, firmó y envió una transacción real de tipo `Manage Data` a Stellar Testnet:
+
+| Campo | Valor |
+|-------|-------|
+| Transaction hash | `2eed9a19ce138ad2fc0accb8ff2ea9d0e5c86ff2c70a2d6c2eb4be54c3428ec9` |
+| Estado | ✅ Aceptada por la red |
+| Operación | `Manage Data` |
+| Clave | `labzk-testnet-evidence` |
+| Valor | `Prueba de transacción real firmada en Stellar Testnet — LabZK` |
+| Tarifa | 100 stroops |
+| Red | Stellar Testnet |
+| RPC | `https://soroban-testnet.stellar.org` |
+| Horizon | `https://horizon-testnet.stellar.org` |
+| Friendbot | `https://friendbot.stellar.org` |
 
 ## Llamadas REALES de solo lectura a contratos (5/5 pasando)
 
-Las siguientes llamadas se ejecutaron contra los contratos Soroban desplegados en Stellar Testnet usando `@stellar/stellar-sdk` v17.4.0 y `server.simulateTransaction()`:
+Las siguientes llamadas se ejecutaron contra los contratos Soroban desplegados en Stellar Testnet usando `@stellar/stellar-sdk` v17.4.0:
 
 | Contrato | ID | Función | Resultado |
 |----------|----|---------|-----------|
@@ -37,38 +54,39 @@ Las siguientes llamadas se ejecutaron contra los contratos Soroban desplegados e
 | Piilo Privacy | `CBDQUOJRFITV4QUEQQXGARLVE6K6RENHVPMQNDKZXOJWGHONKOB7QF46` | `get_commitment(00...32)` | vacío |
 | Atreus Payment | `CDBOSNSY6SARRNMDKOB7VZDEWAYJPVFJMOQONTNRMVC6WUZ75FH3JHIT` | `get_payment_link(00...32)` | vacío |
 
-## Limitación: Transacción firmada adicional
+## Verificación en Stellar Expert
 
-El script `tests/e2e/real-transaction.mjs` implementa una transacción firmada real (Manage Data) que:
-1. Genera un keypair
-2. Solicita fondos al friendbot ✅ (respondió `successful: true`)
-3. Consulta la cuenta en Horizon ⚠️ (no indexada después de 90 segundos)
-4. Construye y firma una transacción Manage Data
-5. La envía a Horizon
-
-**El paso 3 falló porque Horizon testnet no indexó la cuenta después de 90 segundos**, a pesar de que el friendbot confirmó la creación y financiación. Esto es un problema temporal de indexación del servicio Horizon, no de la red Stellar ni del código.
-
-Una vez que la cuenta esté indexada, los pasos 4 y 5 se ejecutarían correctamente (el código está listo y probado con las llamadas de solo lectura).
+- [Cuenta en Stellar Expert](https://stellar.expert/explorer/testnet/account/GBLGPZY7QEVKUSKGOOPUKCMW7JMQ2HMAPUB7F27MMJITOQ2VC3FPID6H)
+- [Transacción en Stellar Expert](https://stellar.expert/explorer/testnet/tx/2eed9a19ce138ad2fc0accb8ff2ea9d0e5c86ff2c70a2d6c2eb4be54c3428ec9)
+- [Friendbot TX en Stellar Expert](https://stellar.expert/explorer/testnet/tx/bcc74e4da94fbfbf42593d2e9722dc6b906683f4103613fab38337d83aa152f4)
+- [ZK Verifier](https://stellar.expert/explorer/testnet/contract/CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT)
+- [Piilo Privacy](https://stellar.expert/explorer/testnet/contract/CBDQUOJRFITV4QUEQQXGARLVE6K6RENHVPMQNDKZXOJWGHONKOB7QF46)
+- [Atreus Payment](https://stellar.expert/explorer/testnet/contract/CDBOSNSY6SARRNMDKOB7VZDEWAYJPVFJMOQONTNRMVC6WUZ75FH3JHIT)
 
 ## Cómo reproducir
 
 ```bash
-# 1. Ver llamadas reales a contratos (ya funcionan)
+# 1. Ver llamadas reales a contratos
 npx jest tests/e2e/contracts.e2e.test.ts --verbose
 
-# 2. Ejecutar script de transacción real (requiere que friendbot funcione)
+# 2. Ejecutar script de transacción real firmada
 node tests/e2e/real-transaction.mjs
 
-# 3. Verificar contratos en Stellar Expert
-# ZK Verifier: https://stellar.expert/explorer/testnet/contract/CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT
-# Piilo Privacy: https://stellar.expert/explorer/testnet/contract/CBDQUOJRFITV4QUEQQXGARLVE6K6RENHVPMQNDKZXOJWGHONKOB7QF46
-# Atreus Payment: https://stellar.expert/explorer/testnet/contract/CDBOSNSY6SARRNMDKOB7VZDEWAYJPVFJMOQONTNRMVC6WUZ75FH3JHIT
+# 3. Suite completa de tests
+npm test
 ```
 
 ## Resumen de evidencia creíble
 
-1. ✅ **Friendbot confirmó** creación y financiación de cuenta en testnet (hash real)
-2. ✅ **5 llamadas reales** de solo lectura a contratos Soroban en testnet
-3. ✅ **Código de transacción firmada** implementado y listo (bloqueado solo por indexación de Horizon)
+1. ✅ **Friendbot creó y financió cuenta** en testnet (hash real verificado en Stellar Expert)
+2. ✅ **Transacción firmada real** enviada y aceptada por la red Stellar Testnet (hash real)
+3. ✅ **5 llamadas reales** de solo lectura a contratos Soroban en testnet
 4. ✅ **21 suites de Jest**, 96 tests pasando, TypeScript 0 errores
+5. ✅ **Todo verificable en Stellar Expert** (explorador público de testnet)
 
+## Limitación (requiere credenciales del usuario)
+
+- **zkLogin OAuth**: necesita Client IDs reales de Google/Apple para pruebas de login social reales
+- **Anchor SEP-6/24**: necesita API keys reales de Settle/Vesseo/Bitso para pruebas de off-ramp/on-ramp reales
+
+Estos se prueban con lógica local y mocks estructurados (sin llamadas de red reales).
