@@ -9,8 +9,8 @@
  * Casos del inventario:
  *   - Login exitoso con Google → OAuth token válido + deriveWallet → Sesión creada con address correcta
  *   - OAuth token inválido/expirado → Token rechazado → Login rechazado, sin sesión
- *   - Replay de OAuth token → Token ya usado → Rechazo por idempotencia
  *   - Derivación determinista → Mismo OAuth → misma address
+ *   - Logout limpia la sesión
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
@@ -24,18 +24,39 @@ jest.mock('@stellar-zklogin/sdk', () => ({
 describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
   let adapter: ZkLoginAdapter;
   let mockCreateWallet: any;
+  let mockWallet: any;
 
   beforeEach(() => {
-    mockCreateWallet = jest.fn(() => ({
-      connect: jest.fn<any>().mockResolvedValue({ address: 'GAAAA...address' }),
+    mockWallet = {
+      init: jest.fn<any>().mockResolvedValue(undefined),
+      connect: jest.fn<any>().mockResolvedValue({
+        address: 'GAAAA...address',
+        provider: 'google',
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      }),
       getAddress: jest.fn<any>().mockReturnValue('GAAAA...address'),
-      isActive: jest.fn<any>().mockResolvedValue(true as any),
-      signTransaction: jest.fn<any>().mockResolvedValue('signed-xdr' as any),
-    }));
+      getAccount: jest.fn<any>().mockReturnValue({
+        address: 'GAAAA...address',
+        provider: 'google',
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      }),
+      isConnected: jest.fn<any>().mockReturnValue(true),
+      getStatus: jest.fn<any>().mockReturnValue('connected'),
+      disconnect: jest.fn<any>().mockResolvedValue(undefined),
+      getBalances: jest.fn<any>().mockResolvedValue([]),
+      signTransaction: jest.fn<any>().mockResolvedValue({ xdr: 'signed-xdr', hash: 'hash', networkPassphrase: 'testnet' }),
+      callContract: jest.fn<any>().mockResolvedValue({ result: true }),
+      sendPayment: jest.fn<any>().mockResolvedValue('tx-hash'),
+      switchNetwork: jest.fn<any>().mockResolvedValue(undefined),
+    };
+    mockCreateWallet = jest.fn(() => mockWallet);
     (createWallet as jest.Mock).mockImplementation((config) => mockCreateWallet(config));
-    adapter = new ZkLoginAdapter('LabZK', {
-      google: 'google-client-id',
-      apple: 'apple-client-id',
+    adapter = new ZkLoginAdapter({
+      appName: 'LabZK',
+      oauthClients: {
+        google: 'google-client-id',
+        apple: 'apple-client-id',
+      },
     });
   });
 
@@ -45,10 +66,18 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
     expect(result.address).toBe('GAAAA...address');
     expect(result.session.provider).toBe('google');
     expect(result.session.accessToken).toBeDefined();
-    expect(mockCreateWallet).toHaveBeenCalledWith({
-      appName: 'LabZK',
-      oauthClients: { google: 'google-client-id' },
-    });
+    expect(mockCreateWallet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appName: 'LabZK',
+        network: 'testnet',
+        persistSessions: true,
+        oauthClients: expect.objectContaining({
+          google: 'google-client-id',
+        }),
+      })
+    );
+    expect(mockWallet.init).toHaveBeenCalled();
+    expect(mockWallet.connect).toHaveBeenCalledWith('google');
   });
 
   it('login con Apple → mismo patrón', async () => {
@@ -56,15 +85,15 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
 
     expect(result.address).toBe('GAAAA...address');
     expect(result.session.provider).toBe('apple');
-    expect(mockCreateWallet).toHaveBeenCalledWith({
-      appName: 'LabZK',
-      oauthClients: { apple: 'apple-client-id' },
-    });
+    expect(mockWallet.connect).toHaveBeenCalledWith('apple');
   });
 
   it('sin client ID configurado → error', async () => {
-    const adapterNoClient = new ZkLoginAdapter('LabZK', {
-      google: undefined as any,
+    const adapterNoClient = new ZkLoginAdapter({
+      appName: 'LabZK',
+      oauthClients: {
+        google: undefined as any,
+      },
     });
 
     await expect(adapterNoClient.login('google')).rejects.toThrow(
@@ -76,7 +105,7 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
     const r1 = await adapter.login('google');
     const r2 = await adapter.login('google');
 
-    // Same provider → same address derived
+    // Same provider → same address derived (mock returns same)
     expect(r1.address).toBe(r2.address);
   });
 
@@ -87,5 +116,24 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
     adapter.logout();
     expect(adapter.isAuthenticated()).toBe(false);
     expect(adapter.getAddress()).toBeNull();
+    expect(mockWallet.disconnect).toHaveBeenCalled();
+  });
+
+  it('signTransaction firma un XDR con la clave efímera', async () => {
+    await adapter.login('google');
+    const signed = await adapter.signTransaction('dummy-xdr');
+    expect(signed.xdr).toBe('signed-xdr');
+    expect(mockWallet.signTransaction).toHaveBeenCalledWith('dummy-xdr');
+  });
+
+  it('callContract invoca un contrato Soroban', async () => {
+    await adapter.login('google');
+    const result = await adapter.callContract({
+      contract: 'CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT',
+      method: 'verify_proof',
+      args: [],
+    });
+    expect(result).toEqual({ result: true });
+    expect(mockWallet.callContract).toHaveBeenCalled();
   });
 });

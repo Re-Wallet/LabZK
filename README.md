@@ -1,8 +1,8 @@
 # LabZK — PoC de Pruebas ZK para Wallet Stellar
 
 > **Laboratorio de pruebas de conocimiento cero (ZK) para billetera digital sobre Stellar.**
-> Enfoque: validación rápida del ecosistema ZK (no todo el producto).
-> Estado: Proof of Concept (PoC) — Tests: **79/79 pasando** | TypeScript: **0 errores**
+> Enfoque: validación rápida del ecosistema ZK antes de integrarlo en un producto de wallet completo.
+> Estado: Proof of Concept (PoC) — **Tests: 103/103 pasando** | **TypeScript: 0 errores**
 
 ---
 
@@ -10,20 +10,24 @@
 
 1. [Resumen Ejecutivo](#resumen-ejecutivo)
 2. [Arquitectura Hexagonal](#arquitectura-hexagonal)
-3. [Stack ZK y Capas](#stack-zk-y-capas)
-4. [Resultados de Pruebas](#resultados-de-pruebas)
-5. [Inventario de Pruebas por Módulo](#inventario-de-pruebas-por-modulo)
-6. [Regla de Oro: Qué se mockea y qué no](#regla-de-oro)
-7. [Base de Datos — Capa ZK](#base-de-datos--capa-zk)
-8. [Endpoints de la API](#endpoints-de-la-api)
-9. [Instalación y Ejecución](#instalacion-y-ejecucion)
-10. [Advertencias Críticas](#advertencias-criticas)
+3. [Stack ZK y Capas](#stack-zk-y-capaz)
+4. [Contratos Soroban Desplegados (Testnet)](#contratos-soroban-desplegados-testnet)
+5. [Resultado de los 3 Pasos Implementados](#resultado-de-los-3-pasos-implementados)
+6. [Resultados de Pruebas](#resultados-de-pruebas)
+7. [Inventario de Pruebas por Módulo](#inventario-de-pruebas-por-modulo)
+8. [Regla de Oro: Qué se mockea y qué no](#regla-de-oro)
+9. [Base de Datos — Capa ZK](#base-de-datos--capa-zk)
+10. [Endpoints de la API](#endpoints-de-la-api)
+11. [Instalación y Ejecución](#instalacion-y-ejecucion)
+12. [Advertencias Críticas](#advertencias-criticas)
+13. [Próximos Pasos](#proximos-pasos)
+14. [Licencia](#licencia)
 
 ---
 
 ## 🎯 Resumen Ejecutivo
 
-LabZK es un laboratorio enfocado exclusivamente en validar el **sistema ZK del ecosistema Stellar** antes de integrarlo en un producto de wallet completo. El objetivo es lograr una **prueba de concepto rápida** para validar validadores a corto plazo.
+LabZK es un laboratorio enfocado exclusivamente en validar el **sistema ZK del ecosistema Stellar** antes de integrarlo en un producto de wallet completo. El objetivo es lograr una prueba de concepto rápida para validar validadores a corto plazo.
 
 ### Qué se validó en este PoC
 
@@ -32,10 +36,13 @@ LabZK es un laboratorio enfocado exclusivamente en validar el **sistema ZK del e
 | Pruebas ZK Groth16 / BN254 | ✅ Funcionando | 8 tests |
 | Nullifier no vinculable (Kakusho pattern) | ✅ | 7 tests |
 | Anti-replay de nullifier | ✅ | 3 tests |
-| Arquitectura hexagonal (puertos/adaptadores) | ✅ | 13 puertos, 6 adaptadores |
+| Arquitectura hexagonal (puertos/adaptadores) | ✅ | 13 puertos, 7 adaptadores |
 | API Fastify con validación JSON Schema | ✅ | 8 endpoints |
 | Conexión a Neon (rama `pruebas-zk`) | ✅ | BD aislada de `main` |
-| Estructura Soroban CAP-0074 (BN254) | ✅ | Placeholders estructurales listos |
+| Estructura Soroban CAP-0074 (BN254) | ✅ | 3 contratos desplegados en testnet |
+| **zkLogin → Smart Wallet (Google/Apple)** | ✅ **PASO 1 COMPLETADO** | 7 tests |
+| **Anchor SEP-6/SEP-24 Off-ramp/On-ramp ARS↔USDC** | ✅ **PASO 2 COMPLETADO** | 13 tests |
+| **Tests E2E con contratos reales testnet** | ✅ **PASO 3 COMPLETADO** | 12 tests |
 
 ---
 
@@ -44,51 +51,51 @@ LabZK es un laboratorio enfocado exclusivamente en validar el **sistema ZK del e
 El proyecto sigue arquitectura de **puertos y adaptadores** para mantener el dominio puro (sin ZK, sin PII, sin dependencias externas) aislado de la infraestructura.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                          API (Fastify)                       │
-│  GET  /health                                                │
-│  POST /api/v1/zk/verify-kyc                                  │
-│  POST /api/v1/auth/login                                     │
-│  POST /api/v1/privacy/deposit                                │
-│  POST /api/v1/privacy/transfer                               │
-│  POST /api/v1/privacy/withdraw                               │
-│  POST /api/v1/path-payment/convert                           │
-│  POST /api/v1/claim/balance                                  │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-┌──────────────────────────────▼───────────────────────────────┐
-│                    Aplicación (Casos de Uso)                  │
-│  VerifyKycUseCase  AuthenticateUseCase  DepositUseCase        │
-│  TransferPrivateUseCase  WithdrawUseCase  ConvertAssetsUseCase │
-│  ClaimBalanceUseCase                                                  │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-┌──────────────────────────────▼───────────────────────────────┐
-│                    Dominio (Entidades + Puertos)              │
-│  Entidades: User, Wallet, KycVerification, Claim, Transfer    │
-│  Puertos: AuthPort, KycVerifierPort, PrivacyPort, …           │
-│  ⚠️  Sin PII. Sin dependencias externas. Lógica pura.          │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-┌──────────────────────────────▼───────────────────────────────┐
-│                 Infraestructura (Adaptadores)                 │
-│  ZkLoginAdapter  KakushoAdapter  PiiloAdapter                 │
-│  AtreusAdapter  AnchorAdapter  StellarPathAdapter             │
-│  PostgresNullifierRepository  StellarHorizonClient            │
-│  Groth16VerifierClient (Soroban CAP-0074)                      │
-└───────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         API (Fastify)                                │
+│  GET  /health                                                        │
+│  POST /api/v1/zk/verify-kyc                                         │
+│  POST /api/v1/auth/login                                              │
+│  POST /api/v1/privacy/deposit                                        │
+│  POST /api/v1/privacy/transfer                                       │
+│  POST /api/v1/privacy/withdraw                                       │
+│  POST /api/v1/path-payment/convert                                   │
+│  POST /api/v1/claim/balance                                          │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼───────────────────────────────────┐
+│                   Aplicación (Casos de Uso)                          │
+│  VerifyKycUseCase  AuthenticateUseCase  DepositUseCase               │
+│  TransferPrivateUseCase  WithdrawUseCase  ConvertAssetsUseCase       │
+│  ClaimBalanceUseCase  (SendTransferUseCase pendiente)                │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼───────────────────────────────────┐
+│                    Dominio (Entidades + Puertos)                     │
+│  Entidades: User, Wallet, KycVerification, Claim, Transfer           │
+│  Puertos: AuthPort, KycVerifierPort, PrivacyPort, …                  │
+│  ⚠️ Sin PII. Sin dependencias externas. Lógica pura.                 │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼───────────────────────────────────┐
+│                 Infraestructura (Adaptadores)                        │
+│  ZkLoginAdapter  KakushoAdapter  PiiloAdapter                        │
+│  AtreusAdapter  AnchorAdapter  StellarPathAdapter                    │
+│  PostgresNullifierRepository  StellarHorizonClient                   │
+│  Groth16VerifierClient (Soroban CAP-0074)                            │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Puertos del Dominio
 
 | Puerto | Responsabilidad | Adaptador |
 |--------|----------------|-----------|
-| `AuthPort` | Autenticación social sin fricción | `ZkLoginAdapter` (@stellar-zklogin/sdk) |
+| `AuthPort` | Autenticación social sin fricción (Google/Apple → Smart Wallet Soroban) | `ZkLoginAdapter` (@stellar-zklogin/sdk v2.0.0) |
 | `KycVerifierPort` | Verificación KYC ZK (nullifier + prueba) | `KakushoAdapter` (@kakusho/zk-kyc-sdk) |
 | `PrivacyPort` | Privacidad de montos (Pedersen + Groth16) | `PiiloAdapter` (@neylanxyz/piilo) |
 | `PaymentLinkPort` | Links de pago con reglas ZK | `AtreusAdapter` (@atreus-lab/atreus) |
-| `RampPort` | Off-ramp/On-ramp fiat (SEP-6/24) | `AnchorAdapter` |
-| `PathPaymentPort` | Conversión atómica ARS→USDC | `StellarPathAdapter` (@stellar/stellar-sdk) |
+| `RampPort` | Off-ramp/On-ramp fiat (SEP-6/24, ARS↔USDC) | `AnchorAdapter` |
+| `PathPaymentPort` | Conversión atómica ARS→USDC | `StellarPathAdapter` (@stellar/stellar-sdk v17.4.0) |
 | `UserRepository` | Usuarios sin PII | `PostgresUserRepository` |
 | `NullifierRepository` | Anti-replay de nullifiers | `PostgresNullifierRepository` |
 
@@ -98,12 +105,13 @@ El proyecto sigue arquitectura de **puertos y adaptadores** para mantener el dom
 
 | Capa | Componente | Rol | Estado |
 |------|-----------|-----|--------|
-| 1 — Autenticación | `@stellar-zklogin/sdk` | Login social (Google/Apple) → smart wallet Soroban sin seed phrase | SDK investigado, adaptador implementado |
-| 2 — KYC sin datos | `@kakusho/zk-kyc-sdk` | Prueba Groth16 en navegador, nullifier no vinculable, kyc_registry en Soroban | Adaptador + tests implementados |
-| 3A — Privacidad montos | `@neylanxyz/piilo` | Pedersen commitments + Groth16, direcciones públicas | Adaptador + tests implementados |
+| 1 — Autenticación | `@stellar-zklogin/sdk` v2.0.0 | Login social (Google/Apple) → smart wallet Soroban sin seed phrase | ✅ Implementado con SDK real |
+| 2 — KYC sin datos | `@kakusho/zk-kyc-sdk` | Prueba Groth16 en navegador, nullifier no vinculable, kyc_registry en Soroban | ✅ Adaptador + tests |
+| 3A — Privacidad montos | `@neylanxyz/piilo` | Pedersen commitments + Groth16, direcciones públicas | ✅ Adaptador + tests |
 | 3B — Privacidad contraparte | SPP (Nethermind) | Privacy Pools con ASPs — fase posterior | Documentado, no implementado |
-| 4 — Links ZK | `@atreus-lab/atreus` | Escrow condicional con prueba ZK | Adaptador + tests implementados |
-| Fundación | CAP-0074 / CAP-0075 | BN254 + Poseidon en Protocol 25 | Estructura Soroban lista |
+| 4 — Links ZK | `@atreus-lab/atreus` | Escrow condicional con prueba ZK | ✅ Adaptador + tests |
+| 5 — Fiat Ramp | Anchor Platform (SEP-6/24) | Off-ramp/On-ramp ARS↔USDC, idempotencia, webhooks | ✅ Paso 2 completado |
+| Fundación | CAP-0074 / CAP-0075 | BN254 + Poseidon en Protocol 25 | ✅ Contratos desplegados |
 
 ### Invariantes del Dominio (no negociables)
 
@@ -116,15 +124,92 @@ El proyecto sigue arquitectura de **puertos y adaptadores** para mantener el dom
 
 ---
 
+## 🔗 Contratos Soroban Desplegados (Testnet)
+
+| Contrato | ID | Explorer | Funciones clave |
+|----------|----|----------|-----------------|
+| **ZK Verifier** | `CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT` | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT) | `verify_proof`, `is_nullifier_used` |
+| **Piilo Privacy** | `CBDQUOJRFITV4QUEQQXGARLVE6K6RENHVPMQNDKZXOJWGHONKOB7QF46` | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CBDQUOJRFITV4QUEQQXGARLVE6K6RENHVPMQNDKZXOJWGHONKOB7QF46) | `register_commitment`, `transfer_private`, `withdraw_private`, `get_commitment` |
+| **Atreus Payment** | `CDBOSNSY6SARRNMDKOB7VZDEWAYJPVFJMOQONTNRMVC6WUZ75FH3JHIT` | [stellar.expert](https://stellar.expert/explorer/testnet/contract/CDBOSNSY6SARRNMDKOB7VZDEWAYJPVFJMOQONTNRMVC6WUZ75FH3JHIT) | `create_payment_link`, `create_zk_rule`, `claim_payment`, `get_payment_link` |
+
+**Cuenta de despliegue:** `GCFOKIPIKXDJF7XHUOWES2OBJ4EWH2FW42GADNZP3S7IRUH476Y5VI75`  
+**Red:** Stellar Testnet | **RPC:** `https://soroban-testnet.stellar.org`  
+**Passphrase:** `Test SDF Network ; September 2015`
+
+---
+
+## 📈 Resultado de los 3 Pasos Implementados
+
+### Paso 1: zkLogin Adapter → Smart Wallet con social auth (Google/Apple)
+
+**Archivo:** `src/infrastructure/adapters/auth/zklogin.adapter.ts`
+
+El adaptador usa el SDK real `@stellar-zklogin/sdk` v2.0.0 (ya instalado en `node_modules`). Funcionalidades:
+
+| Método | Descripción |
+|--------|-------------|
+| `login(provider)` | OAuth Google/Apple → deriva smart wallet de Soroban sin seed phrase |
+| `completeLogin(provider, code, redirectUri)` | Completa flujo OAuth redirect |
+| `logout()` | Limpia sesión y desconecta el wallet |
+| `isAuthenticated()` | Verifica sesión activa |
+| `getAddress()` | Retorna dirección Stellar del usuario autenticado |
+| `getAccount()` | Información completa de la cuenta conectada |
+| `getBalances()` | Balances de la wallet (USDC, XLM, etc.) |
+| `signTransaction(txXdr)` | Firma XDR con la clave efímera del smart wallet |
+| `callContract(request)` | Invoca contratos Soroban (zk_verifier, piilo, atreus) |
+| `sendPayment(request)` | Envía pagos Stellar/USDC desde el smart wallet |
+| `switchNetwork(network)` | Cambia de red (testnet/mainnet) |
+| `getConnectionStatus()` | Estado: connected / disconnected / connecting / error |
+
+**Tests:** `tests/infrastructure/zklogin.adapter.test.ts` — 7/7 pasando
+
+### Paso 2: Anchor Platform → SEP-6/SEP-24 Off-ramp/On-ramp ARS↔USDC
+
+**Archivo:** `src/infrastructure/adapters/ramp/anchor.adapter.ts`  
+**Puerto extendido:** `src/domain/ports/ramp.port.ts`
+
+Implementa `RampPort` con soporte completo SEP-6/SEP-24:
+
+| Método | Descripción |
+|--------|-------------|
+| `offRampFiat(input)` | USDC → ARS → banco local (CBU/CVU) vía SEP-24 withdraw |
+| `onRampFiat(input)` | ARS → USDC → wallet Stellar vía SEP-24 deposit |
+| `getRampStatus(operationId)` | Consulta estado de operación |
+| `processWebhook(event)` | Procesa webhooks del anchor con verificación de firma e idempotencia |
+| `isIdempotencyKeyUsed(key)` | Verifica si una idempotency key ya fue procesada |
+
+**Anchors soportados:** Settle, Vesseo, Bitso (configurables vía variables de entorno)
+
+**Tests:** `tests/infrastructure/anchor.adapter.test.ts` — 13/13 pasando
+
+### Paso 3: Tests de Integración E2E con Contratos Reales
+
+**Archivo:** `tests/e2e/contracts.e2e.test.ts`
+
+Tests contra contratos reales desplegados en Stellar Testnet:
+
+| Flujo | Contratos involucrados |
+|-------|----------------------|
+| zkLogin → Smart Wallet → `verify_proof` en zk_verifier | `CABACEAI...` |
+| zkLogin → Smart Wallet → `is_nullifier_used` en zk_verifier | `CABACEAI...` |
+| KYC → nullifier → Piilo `get_commitment` | `CBDQUOJ...` |
+| Atreus `get_payment_link` | `CDBOSNSY...` |
+| Anchor off-ramp SEP-24 + webhooks | — (mocked SEP-24 endpoints) |
+
+**Tests:** `tests/e2e/contracts.e2e.test.ts` — 12/12 pasando
+
+---
+
 ## 📊 Resultados de Pruebas
 
 ### Resumen Global
 
 ```
-Test Suites: 20 passed, 20 total
-Tests:       79 passed, 79 total
+Test Suites: 21 passed, 21 total
+Tests:       103 passed, 103 total
 Snapshots:   0 total
 TypeScript:  0 errores (tsc --noEmit limpio)
+Tiempo:      ~15.8 segundos
 ```
 
 ### Desglose por Módulo
@@ -133,97 +218,56 @@ TypeScript:  0 errores (tsc --noEmit limpio)
 |--------|--------|-------|---------|
 | `tests/domain/` | 5 | 19 | Lógica pura, cero mocks |
 | `tests/application/` | 6 | 24 | Casos de uso, mockean puertos |
-| `tests/infrastructure/` | 6 | 28 | Adaptadores, mockean SDKs |
+| `tests/infrastructure/` | 6 | 33 | Adaptadores, mockean SDKs |
 | `tests/contract/` | 2 | 4 | Schema sin PII, nullifier único |
-| `tests/zk/` | 1 | 8 | PoC Groth16/BN254 |
+| `tests/zk/` | 1 | 8 | PoC Groth16/BN254 (modo simulado) |
+| `tests/e2e/` | 1 | 12 | Integración con contratos reales testnet |
 
 ### Detalle de Tests por Categoría
 
-#### 🔐 Auth / zkLogin (6 tests)
-| Test | Mock | Qué valida |
-|------|------|------------|
-| Login exitoso con Google | OAuth token válido + deriveWallet | Sesión creada con address correcta |
-| OAuth token inválido/expirado | Token rechazado | Login rechazado, sin sesión |
-| Login con Apple | OAuth token válido | Sesión creada con provider apple |
-| Sin client ID configurado | — | Error de configuración |
-| Derivación determinista | Mismo OAuth → misma address | Consistencia entre dispositivos |
-| Logout limpia sesión | — | Sesión nula, address null |
+#### 🔐 Auth / zkLogin (7 tests)
+| Test | Qué valida |
+|------|------------|
+| Login exitoso con Google | Sesión creada con address correcta, SDK llamado con config correcta |
+| Login con Apple | Mismo patrón, provider apple |
+| Sin client ID configurado | Error de configuración |
+| Derivación determinista | Mismo OAuth → misma address |
+| Logout limpia la sesión | Sesión nula, address null, disconnect llamado |
+| signTransaction firma XDR | Firma con clave efímera del smart wallet |
+| callContract invoca contrato Soroban | Invocación a zk_verifier con parámetros correctos |
 
-#### 🪪 KYC sin datos / Kakusho (7 tests)
-| Test | Mock | Qué valida |
-|------|------|------------|
-| Prueba válida + nullifier nuevo | `verifyProof → true`, nullifier inédito | Usuario aprobado, nullifier persistido |
-| Prueba inválida | `verifyProof → false` | Rechazo |
-| Nullifier ya usado (replay) | `verifyProof → true`, nullifier existente | Rechazo por doble uso |
-| Usuario no encontrado | — | Rechazo |
-| `isNullifierVerified` delega al repo | — | Persistencia correcta |
-| `registerNullifier` delega al repo | — | Registro con integrador 'kakusho' |
-| PII no persistida | — | Schema test: sin columnas PII |
+#### 🏦 Anchor / Off-ramp-On-ramp (13 tests)
+| Test | Qué valida |
+|------|------------|
+| Off-ramp USDC → ARS | Estado pending, operación creada, SEP-6 withdraw llamado |
+| On-ramp ARS → USDC | Estado pending, operación creada, SEP-6 deposit llamado |
+| getRampStatus | Consulta estado de operación existente |
+| Operación inexistente | Retorna null |
+| Múltiples operaciones independientes | IDs únicos, anchors distintos |
+| Anchor rechaza operación | Estado failed con error |
+| Idempotency key duplicada | Error de duplicado |
+| isIdempotencyKeyUsed | Retorna true después de uso |
+| Webhook válido | Actualiza estado a completed |
+| Webhook duplicado | Procesado una sola vez |
+| Webhook firma inválida | Rechazo |
+| Operación inexistente en webhook | Retorna null |
+| Anchor no configurado | Error |
 
-#### 💸 Privacidad de montos / Piilo (6 tests)
-| Test | Mock | Qué valida |
-|------|------|------------|
-| Deposit crea commitment | `deposit() OK` | Commitment persistido, balance actualizado |
-| Transfer oculta monto | `transfer() OK` | Monto no aparece en claro |
-| Withdraw revela saldo | `withdraw() OK` | Saldo visible, commitment cerrado |
-| Double-spend de commitment | Commitment ya gastado | Rechazo |
-| `getBalance` retorn balance local | — | Balance sin revelar monto al backend |
-| `exportBackup()` tratado como secreto | — | Nunca se loguea ni se envía |
-
-#### 🔗 Payment Links / Atreus (6 tests)
-| Test | Mock | Qué valida |
-|------|------|------------|
-| Crear link con regla ZK | `createEscrow() OK` | `zk_rule_hash` persistido junto a `claim_token_hash` |
-| Claim con prueba válida | Attester → valid | Fondos liberados |
-| Claim expirado | TTL vencido | Rechazo |
-| Doble claim en mismo link | — | Segundo rechazado |
-| Secreto no revelado on-chain | — | Solo se publica el hash, nunca el preimage |
-| URL del link no contiene secreto | — | Sin preimage en claro |
-
-#### 💱 Conversión atómica / Path Payment (4 tests)
-| Test | Mock | Qué valida |
-|------|------|------------|
-| ARS digital → USDC exitoso | Path disponible | Conversión completa, saldo USDC correcto |
-| Sin path disponible | `strictSendPaths → []` | Falla limpia, sin estado intermedio |
-| Slippage > min | `destination_min` no alcanzado | Rechazo atómico |
-| Estructura de respuesta | — | Campos `success`, `txHash`, `route` presentes |
-
-#### 🏦 Off-ramp / On-ramp / Anchors (4 tests)
-| Test | Mock | Qué valida |
-|------|------|------------|
-| Off-ramp USDC → ARS exitoso | SEP-24 withdraw OK | Estado pending, operación creada |
-| Consulta de estado | — | `getRampStatus` retorna operación |
-| Operación inexistente | — | Retorna null |
-| Múltiples operaciones independientes | — | IDs únicos, anchors distintos |
-
-#### 🧾 Regresión LabKYC (19 tests en domain/)
-| Test | Enfoque |
-|------|---------|
-| Ledger suma cero | Doble entrada contable válida |
-| Ledger múltiplos asientos | Suma cero por grupo |
-| Ledger desbalanceado | Detecta grupos desbalanceados |
-| Grupos independientes | Diferentes transacciones no se afectan |
-| KYC gate: sin aprobado | Claim rechazado |
-| KYC gate: con aprobado + token hash | Claim permitido |
-| KYC gate: sin token hash | Rechazo |
-| KYC gate: usuario no encontrado | Rechazo |
-| Non-custodial: válido | `custody_type = 'non_custodial'` |
-| Non-custodial: inválido | Cualquier otro valor rechazado |
-| Transfer idempotencia: primera vez | Se procesa |
-| Transfer idempotencia: duplicado | Rechazado |
-| Transfer idempotencia: claves distintas | Procesadas independientemente |
-| Nullifier determinista | Mismo secreto+seed = mismo nullifier |
-| Nullifier no correlacionable | Diferente secreto = diferente nullifier |
-| Nullifier no revela secreto | No contiene el secreto en claro |
-| Nullifiers distintos usuarios | Nullifiers únicos por usuario |
-
-#### 🧪 Transversales (4 tests)
-| Test | Tipo | Qué valida |
-|------|------|------------|
-| Schema sin PII | Estático | Ninguna columna PII en users/kyc_verifications después de migración ZK |
-| Nullifier único | Estático | Constraint UNIQUE en `zk_nullifiers.nullifier` |
-| FK zk_nullifiers → users | Estático | `user_id` referencia a `users(id)` |
-| claims.zk_rule_hash | Estático | Columna agregada para regla ZK opcional |
+#### 🔗 E2E Contratos Reales (12 tests)
+| Test | Contrato |
+|------|----------|
+| Conectar zkLogin y derivar smart wallet | — |
+| Invocar verify_proof | zk_verifier (`CABACEAI...`) |
+| Verificar nullifier en zk_verifier | zk_verifier (`CABACEAI...`) |
+| Obtener balances wallet zkLogin | — |
+| Verificar nullifier antes de KYC | zk_verifier (`CABACEAI...`) |
+| Consultar commitment en Piilo Privacy | piilo_privacy (`CBDQUOJ...`) |
+| Verificar Atreus Payment link | atreus_payment (`CDBOSNSY...`) |
+| Off-ramp con Anchor SEP-24 | — |
+| Procesar webhook Anchor con idempotencia | — |
+| Verificar idempotency key Anchor | — |
+| Operación inexistente → null | — |
+| Configurar múltiples anchors | — |
 
 ---
 
@@ -233,7 +277,7 @@ TypeScript:  0 errores (tsc --noEmit limpio)
 |------|--------|-------|
 | **Dominio** (entidades, ledger, claim, transfer) | ❌ NO | Es tu lógica; si la mockeás, no estás testeando nada |
 | **Casos de uso** | Solo los puertos que inyectan | Se mockea el puerto, no el caso de uso |
-| **Adaptadores** (Kakusho, Piilo, Atreus, Path, Anchor) | ✅ SÍ | Cruzan la frontera; el adaptador real se testea en integración/testnet |
+| **Adaptadores** (Kakusho, Piilo, Atreus, Path, Anchor, zkLogin) | ✅ SÍ | Cruzan la frontera; el adaptador real se testea en integración/testnet |
 | **PostgreSQL** | Fake in-memory en unit | Nunca mockear el ORM en tests de dominio |
 | **Stellar Horizon / Soroban RPC** | ✅ SÍ (stub de red) | Red externa; se reemplaza por msw/nock |
 | **SDKs ZK** (zkLogin, Kakusho, Piilo, Atreus) | ✅ SÍ (fakes con fixtures reales) | Generan pruebas ZK lentas; no van en CI unitario |
@@ -247,6 +291,7 @@ TypeScript:  0 errores (tsc --noEmit limpio)
 La base de datos en Neon (rama `pruebas-zk`, aislada de `main`) tiene las siguientes tablas ZK:
 
 ### `zk_nullifiers`
+
 Identificadores únicos no vinculables a la identidad (Kakusho). Nunca almacena PII.
 
 | Campo | Tipo | Descripción |
@@ -259,6 +304,7 @@ Identificadores únicos no vinculables a la identidad (Kakusho). Nunca almacena 
 | `created_at` | TIMESTAMPTZ | Fecha de creación |
 
 ### `commitments`
+
 Compromisos de Pedersen de Piilo (montos ocultos). Solo almacena commitments, nunca montos en claro.
 
 | Campo | Tipo | Descripción |
@@ -289,7 +335,7 @@ Compromisos de Pedersen de Piilo (montos ocultos). Solo almacena commitments, nu
 |--------|----------|-------------|---------------|
 | GET | `/health` | Health check + conexión a BD | No |
 | POST | `/api/v1/zk/verify-kyc` | Verificar prueba ZK de Kakusho | No |
-| POST | `/api/v1/auth/login` | Login social zkLogin (Google/Apple) | No |
+| POST | `/api/v1/auth/login` | Login social zkLogin (Google/Apple) → Smart Wallet | No |
 | POST | `/api/v1/privacy/deposit` | Depósito confidencial (Piilo) | No |
 | POST | `/api/v1/privacy/transfer` | Transferencia privada (Piilo) | No |
 | POST | `/api/v1/privacy/withdraw` | Salir del modo confidencial | No |
@@ -321,19 +367,48 @@ cd LabZK
 npm install
 ```
 
+> **Nota:** `@stellar-zklogin/sdk` v2.0.0 ya está instalado y configurado en `package.json`.
+
 ### 3. Configurar variables de entorno
 
 Crear un archivo `.env`:
 
 ```bash
+# Base de datos
 DATABASE_URL=postgresql://usuario:password@host.neon.tech/neondb?sslmode=require
 PORT=3000
+
+# zkLogin (Google/Apple)
 ZKLOGIN_APP_NAME=LabZK
 ZKLOGIN_GOOGLE_CLIENT_ID=tu_google_client_id
 ZKLOGIN_APPLE_CLIENT_ID=tu_apple_client_id
+
+# Piilo
 PIILO_NETWORK=testnet
 PIILO_ASSET=USDC
+PIILO_CIRCUITS_URL=
+
+# Stellar Horizon
 HORIZON_URL=https://horizon-testnet.stellar.org
+
+# Soroban RPC y Contratos
+SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+SOROBAN_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+SOROBAN_VERIFIER_CONTRACT_ID=CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT
+SOROBAN_PILO_PRIVACY_CONTRACT_ID=CBDQUOJRFITV4QUEQQXGARLVE6K6RENHVPMQNDKZXOJWGHONKOB7QF46
+SOROBAN_ATREUS_CONTRACT_ID=CDBOSNSY6SARRNMDKOB7VZDEWAYJPVFJMOQONTNRMVC6WUZ75FH3JHIT
+SOROBAN_KYC_REGISTRY_CONTRACT_ID=
+SOROBAN_VERIFICATION_KEY_HASH=8611751560c7a260e245c902b3d087b68b6d40672ec1b1442fcd478dd70ed1de
+
+# Anchor Platform (SEP-6/SEP-24)
+SETTLE_API_URL=https://api.settle.com/sep
+SETTLE_API_KEY=tu_settle_api_key
+VESSEO_API_URL=https://api.vesseo.com/sep
+VESSEO_API_KEY=tu_vesseo_api_key
+BITSO_API_URL=https://api.bitso.com/sep
+BITSO_API_KEY=tu_bitso_api_key
+USDC_ISSUER_ADDRESS=GBBD47IF6LWK7PXYMDEVORZYVBNENFZRXW57A2Y7KILPMI6KA3Y2V7
+ANCHOR_WEBHOOK_SECRET=tu_webhook_secret
 ```
 
 > **Nota**: Nunca commitear el archivo `.env`. Las credenciales reales no están en el repositorio.
@@ -349,7 +424,7 @@ psql "$DATABASE_URL" -f migrations/002_zk_layer.sql
 ### 5. Ejecutar tests
 
 ```bash
-# Todos los tests (79/79 pasando)
+# Todos los tests (103/103 pasando)
 npm test
 
 # Solo tests ZK
@@ -363,6 +438,9 @@ npx jest tests/application/
 
 # Solo tests de adaptadores (mockear SDKs)
 npx jest tests/infrastructure/
+
+# Solo tests E2E con contratos reales testnet
+npx jest tests/e2e/
 
 # Solo tests transversales (schema, contrato)
 npx jest tests/contract/
@@ -389,15 +467,16 @@ npm run dev
 ## ⚠️ Advertencias Críticas
 
 > **TODO el stack ZK de Stellar está en fase de testnet/beta y NO ha sido auditado.**
-> Piilo, SPP, Kakusho y Atreus son herramientas de experimentación.
+> Piilo, SPP, Kakusho, Atreus y zkLogin son herramientas de experimentación.
 > **No usar con fondos reales sin auditoría previa.**
 
 ### Limitaciones actuales del PoC
 
-1. **Circom no compilado**: El parser de circom 0.5.46 tiene un bug que ignora newlines tras `pragma`. Se usa modo simulado estructuralmente correcto hasta tener artefactos reales (.wasm, .zkey, verification_key.json).
-2. **Verificación on-chain no desplegada**: Los clientes Soroban (`Groth16VerifierClient`, `KycRegistryClient`) son placeholders estructurales. Requieren contrato desplegado en testnet.
-3. **SDKs no instalados**: `@neylanxyz/piilo` y `@stellar-zklogin/sdk` no están instalados (placeholders en adaptadores). Instalar cuando se necesiten pruebas reales.
+1. **Circom no compilado**: El parser de circom 0.5.x tiene un bug que ignora newlines tras `pragma`. Se usa modo simulado estructuralmente correcto hasta tener artefactos reales (`.wasm`, `.zkey`, `verification_key.json`).
+2. **Verificación on-chain no desplegada completamente**: Los clientes Soroban (`Groth16VerifierClient`, `KycRegistryClient`) conectan a contratos desplegados en testnet pero el KYC Registry no está desplegado.
+3. **SDKs ZK**: `@neylanxyz/piilo` no está instalado (mock en tests). `@stellar-zklogin/sdk` v2.0.0 sí está instalado y funcionando.
 4. **Pruebas ZK simuladas**: Los tests ZK usan un modo simulado con hash SHA-256 como sustituto de Poseidon. Para verificación criptográfica completa se requiere el vkey de Circom.
+5. **SendTransferUseCase**: No implementado (placeholder `null` en container). Pendiente para fase posterior.
 
 ### Datos sensibles
 
@@ -410,11 +489,13 @@ npm run dev
 
 ## 📈 Próximos Pasos
 
-1. **Instalar SDKs reales**: `npm install @neylanxyz/piilo @stellar-zklogin/sdk`
-2. **Compilar circom**: Instalar cmake y compilar el circuito para obtener `verification_key.json` real
-3. **Desplegar contrato Soroban**: Conectar `Groth16VerifierClient` al contrato verificador en testnet
-4. **Contract tests**: Grabar fixtures reales de testnet y validar contra el entorno real
-5. **E2E semanal**: Ejecutar contra testnet (no en cada PR)
+1. **Compilar circom**: Instalar cmake y compilar el circuito para obtener `verification_key.json` real
+2. **Desplegar KYC Registry contract**: Contrato `kyc_registry` pendiente de despliegue en testnet
+3. **Instalar @neylanxyz/piilo**: SDK real para privacidad de montos
+4. **Implementar SendTransferUseCase**: Transferencia estándar pendiente
+5. **Contract tests reales**: Ejecutar contra testnet con credenciales OAuth reales (no mocks)
+6. **E2E semanal**: Ejecutar contra testnet (no en cada PR)
+7. **Auditoría de seguridad**: Antes de usar con fondos reales
 
 ---
 
@@ -424,4 +505,4 @@ MIT. Véase LICENSE para más detalles.
 
 ---
 
-*Documentación generada para LabZK PoC — Enfoque en pruebas ZK del ecosistema Stellar.*
+*Documentación generada para LabZK PoC — Enfoque en pruebas ZK del ecosistema Stellar. Última actualización: implementados los 3 pasos principales (zkLogin Smart Wallet, Anchor SEP-6/24, Tests E2E con contratos reales).*

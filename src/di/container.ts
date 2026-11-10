@@ -2,9 +2,9 @@
  * src/di/container.ts
  *
  * Contenedor de inversiones de control (DI).
- * Ensambla: pool de Neon → repositorios → adaptadores → casos de uso.
+ * Ensambla: pool de Neon -> repositorios -> adaptadores -> casos de uso.
  *
- * Conecta KakushoAdapter → PostgresNullifierRepository (tabla zk_nullifiers en Neon).
+ * Conecta KakushoAdapter -> PostgresNullifierRepository (tabla zk_nullifiers en Neon).
  * Todas las credenciales vienen de variables de entorno (nunca hardcodeadas).
  */
 
@@ -34,9 +34,6 @@ import { SendTransferUseCase, type SendTransferInput } from '../application/tran
 import { ConvertAssetsUseCase, type ConvertAssetsInput } from '../application/path-payment/convert-assets.use-case.js';
 import { ClaimBalanceUseCase, type ClaimBalanceInput } from '../application/claim/claim-balance.use-case.js';
 
-/**
- * Configuración cargada desde variables de entorno.
- */
 export interface AppConfig {
   database: DatabaseConfig;
   port: number;
@@ -47,30 +44,41 @@ export interface AppConfig {
   piilo: {
     network: 'testnet' | 'mainnet';
     asset: string;
-    wallet?: any; // Se inyecta cuando se instale @neylanxyz/piilo con un wallet real
+    wallet?: any;
     circuitsUrl?: string;
   };
   horizonUrl: string;
+  anchor: {
+    anchors: Record<string, {
+      name: string;
+      baseUrl: string;
+      sep6Enabled: boolean;
+      sep24Enabled: boolean;
+      kycRequired: boolean;
+      supportedAssets: string[];
+      apiKey?: string;
+    }>;
+    usdcIssuer?: string;
+    usdcDistributionPublicKey?: string;
+    webhookSecret?: string;
+  };
   soroban: {
     rpcUrl: string;
     networkPassphrase: string;
     verifierContractId: string;
     kycRegistryContractId: string;
     verificationKeyHash: string;
+    piiloPrivacyContractId: string;
+    atreusContractId: string;
   };
 }
 
-/**
- * Contenedor de dependencias ensamblado.
- */
 export interface Container {
   config: AppConfig;
   pool: ReturnType<typeof createPool>;
-  // Repositorios
   nullifierRepo: PostgresNullifierRepository;
   commitmentRepo: PostgresCommitmentRepository;
   userRepo: PostgresUserRepository;
-  // Adaptadores
   kakushoAdapter: KakushoAdapter;
   piiloAdapter: PiiloAdapter;
   atreusAdapter: AtreusAdapter;
@@ -78,10 +86,8 @@ export interface Container {
   stellarPathAdapter: StellarPathAdapter;
   zkloginAdapter: ZkLoginAdapter;
   horizonClient: StellarHorizonClient;
-  // Clientes Soroban
   groth16VerifierClient: Groth16VerifierClient;
   kycRegistryClient: KycRegistryClient;
-  // Casos de uso
   verifyKycUseCase: VerifyKycUseCase;
   authenticateUseCase: AuthenticateUseCase;
   depositUseCase: DepositUseCase;
@@ -92,36 +98,33 @@ export interface Container {
   claimBalanceUseCase: ClaimBalanceUseCase;
 }
 
-/**
- * Crea y ensambla el contenedor completo.
- * Conecta KakushoAdapter → PostgresNullifierRepository → zk_nullifiers en Neon.
- */
 export function createContainer(config: AppConfig): Container {
-  // --- Pool de Neon (rama pruebas-zk, aislada de main) ---
   const pool = createPool(config.database);
-
-  // --- Repositorios ---
   const nullifierRepo = new PostgresNullifierRepository(pool);
   const commitmentRepo = new PostgresCommitmentRepository(pool);
   const userRepo = new PostgresUserRepository(pool);
 
-  // --- Adaptadores ---
-  // KakushoAdapter recibe el nullifierRepo real (PostgresNullifierRepository)
-  // para verificar y registrar nullifiers en la tabla zk_nullifiers de Neon.
   const kakushoAdapter = new KakushoAdapter(nullifierRepo);
-
   const piiloAdapter = new PiiloAdapter(config.piilo);
-
   const atreusAdapter = new AtreusAdapter();
-  const anchorAdapter = new AnchorAdapter();
+  const anchorAdapter = new AnchorAdapter({
+    anchors: config.anchor.anchors,
+    horizonUrl: config.horizonUrl,
+    usdcIssuer: config.anchor.usdcIssuer,
+    usdcDistributionPublicKey: config.anchor.usdcDistributionPublicKey,
+    webhookSecret: config.anchor.webhookSecret,
+  });
   const stellarPathAdapter = new StellarPathAdapter(config.horizonUrl);
-  const zkloginAdapter = new ZkLoginAdapter(
-    config.zklogin.appName,
-    config.zklogin.oauthClients
-  );
+  const zkloginAdapter = new ZkLoginAdapter({
+    appName: config.zklogin.appName,
+    oauthClients: config.zklogin.oauthClients,
+    network: (config.soroban.networkPassphrase.includes('Testnet') || config.soroban.networkPassphrase.includes('testnet')) ? 'testnet' : 'mainnet',
+    rpcUrl: config.soroban.rpcUrl,
+    sessionDurationSeconds: 86400,
+    persistSessions: true,
+  });
   const horizonClient = new StellarHorizonClient(config.horizonUrl);
 
-  // --- Clientes Soroban ---
   const verifierConfig: SorobanVerifierConfig = {
     contractId: config.soroban.verifierContractId,
     rpcUrl: config.soroban.rpcUrl,
@@ -136,50 +139,28 @@ export function createContainer(config: AppConfig): Container {
   const groth16VerifierClient = new Groth16VerifierClient(verifierConfig);
   const kycRegistryClient = new KycRegistryClient(kycConfig);
 
-  // --- Casos de uso ---
   const verifyKycUseCase = new VerifyKycUseCase(kakushoAdapter, nullifierRepo, userRepo);
   const authenticateUseCase = new AuthenticateUseCase(zkloginAdapter);
   const depositUseCase = new DepositUseCase(piiloAdapter);
   const transferPrivateUseCase = new TransferPrivateUseCase(piiloAdapter);
   const withdrawUseCase = new WithdrawUseCase(piiloAdapter);
-  // TODO: Implementar WalletRepository y LedgerRepository para wiring completo
   const sendTransferUseCase = null as unknown as SendTransferUseCase;
   const convertAssetsUseCase = new ConvertAssetsUseCase(stellarPathAdapter);
   const claimBalanceUseCase = new ClaimBalanceUseCase(userRepo);
 
   return {
-    config,
-    pool,
-    nullifierRepo,
-    commitmentRepo,
-    userRepo,
-    kakushoAdapter,
-    piiloAdapter,
-    atreusAdapter,
-    anchorAdapter,
-    stellarPathAdapter,
-    zkloginAdapter,
-    horizonClient,
-    groth16VerifierClient,
-    kycRegistryClient,
-    verifyKycUseCase,
-    authenticateUseCase,
-    depositUseCase,
-    transferPrivateUseCase,
-    withdrawUseCase,
-    sendTransferUseCase,
-    convertAssetsUseCase,
-    claimBalanceUseCase,
+    config, pool, nullifierRepo, commitmentRepo, userRepo,
+    kakushoAdapter, piiloAdapter, atreusAdapter, anchorAdapter,
+    stellarPathAdapter, zkloginAdapter, horizonClient,
+    groth16VerifierClient, kycRegistryClient,
+    verifyKycUseCase, authenticateUseCase, depositUseCase,
+    transferPrivateUseCase, withdrawUseCase, sendTransferUseCase,
+    convertAssetsUseCase, claimBalanceUseCase,
   };
 }
 
-/**
- * Crea el contenedor desde variables de entorno.
- * REQUIRED: DATABASE_URL (Neon rama pruebas-zk)
- */
 export function createContainerFromEnv(): Container {
-  const connectionString =
-    process.env.DATABASE_URL ??
+  const connectionString = process.env.DATABASE_URL ??
     'postgresql://usuario:password@localhost:5432/labzk?sslmode=require';
 
   const config: AppConfig = {
@@ -198,14 +179,49 @@ export function createContainerFromEnv(): Container {
       circuitsUrl: process.env.PIILO_CIRCUITS_URL,
     },
     horizonUrl: process.env.HORIZON_URL ?? 'https://horizon-testnet.stellar.org',
+    anchor: {
+      anchors: {
+        settle: {
+          name: 'Settle',
+          baseUrl: process.env.SETTLE_API_URL ?? 'https://api.settle.com/sep',
+          sep6Enabled: true,
+          sep24Enabled: true,
+          kycRequired: true,
+          supportedAssets: ['USDC', 'ARS'],
+          apiKey: process.env.SETTLE_API_KEY,
+        },
+        vesseo: {
+          name: 'Vesseo',
+          baseUrl: process.env.VESSEO_API_URL ?? 'https://api.vesseo.com/sep',
+          sep6Enabled: true,
+          sep24Enabled: true,
+          kycRequired: true,
+          supportedAssets: ['USDC', 'ARS'],
+          apiKey: process.env.VESSEO_API_KEY,
+        },
+        bitso: {
+          name: 'Bitso',
+          baseUrl: process.env.BITSO_API_URL ?? 'https://api.bitso.com/sep',
+          sep6Enabled: true,
+          sep24Enabled: false,
+          kycRequired: true,
+          supportedAssets: ['USDC', 'ARS'],
+          apiKey: process.env.BITSO_API_KEY,
+        },
+      },
+      usdcIssuer: process.env.USDC_ISSUER_ADDRESS,
+      usdcDistributionPublicKey: process.env.USDC_DISTRIBUTION_PUBLIC_KEY,
+      webhookSecret: process.env.ANCHOR_WEBHOOK_SECRET,
+    },
     soroban: {
       rpcUrl: process.env.SOROBAN_RPC_URL ?? 'https://soroban-testnet.stellar.org',
       networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015',
       verifierContractId: process.env.SOROBAN_VERIFIER_CONTRACT_ID ?? 'CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT',
       kycRegistryContractId: process.env.SOROBAN_KYC_REGISTRY_CONTRACT_ID ?? '',
       verificationKeyHash: process.env.SOROBAN_VERIFICATION_KEY_HASH ?? '',
+      piiloPrivacyContractId: process.env.SOROBAN_PILO_PRIVACY_CONTRACT_ID ?? 'CBDQUOJRFITV4QUEQQXGARLVE6K6RENHVPMQNDKZXOJWGHONKOB7QF46',
+      atreusContractId: process.env.SOROBAN_ATREUS_CONTRACT_ID ?? '',
     },
   };
-
   return createContainer(config);
 }
