@@ -9,24 +9,28 @@
  * Casos del inventario:
  *   - Login exitoso con Google → OAuth token válido + deriveWallet → Sesión creada con address correcta
  *   - OAuth token inválido/expirado → Token rechazado → Login rechazado, sin sesión
+ *   - Sin client ID configurado → error de configuración
  *   - Derivación determinista → Mismo OAuth → misma address
  *   - Logout limpia la sesión
+ *   - signTransaction firma un XDR con la clave efímera
+ *   - callContract invoca un contrato Soroban
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { ZkLoginAdapter } from '../../src/infrastructure/adapters/auth/zklogin.adapter';
-import { createWallet } from '@stellar-zklogin/sdk';
 
-jest.mock('@stellar-zklogin/sdk', () => ({
-  createWallet: jest.fn(),
-}));
+// Mock automático del SDK de zkLogin (sin factory que referencia 'jest')
+jest.mock('@stellar-zklogin/sdk');
+
+const { createWallet } = require('@stellar-zklogin/sdk');
 
 describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
   let adapter: ZkLoginAdapter;
-  let mockCreateWallet: any;
   let mockWallet: any;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+
     mockWallet = {
       init: jest.fn<any>().mockResolvedValue(undefined),
       connect: jest.fn<any>().mockResolvedValue({
@@ -49,8 +53,7 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
       sendPayment: jest.fn<any>().mockResolvedValue('tx-hash'),
       switchNetwork: jest.fn<any>().mockResolvedValue(undefined),
     };
-    mockCreateWallet = jest.fn(() => mockWallet);
-    (createWallet as jest.Mock).mockImplementation((config) => mockCreateWallet(config));
+    (createWallet as jest.Mock).mockImplementation(() => mockWallet);
     adapter = new ZkLoginAdapter({
       appName: 'LabZK',
       oauthClients: {
@@ -66,7 +69,7 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
     expect(result.address).toBe('GAAAA...address');
     expect(result.session.provider).toBe('google');
     expect(result.session.accessToken).toBeDefined();
-    expect(mockCreateWallet).toHaveBeenCalledWith(
+    expect(createWallet).toHaveBeenCalledWith(
       expect.objectContaining({
         appName: 'LabZK',
         network: 'testnet',
@@ -92,7 +95,7 @@ describe('Adaptador — ZkLoginAdapter (Auth sin fricción)', () => {
     const adapterNoClient = new ZkLoginAdapter({
       appName: 'LabZK',
       oauthClients: {
-        google: undefined as any,
+        google: undefined as unknown as string,
       },
     });
 
