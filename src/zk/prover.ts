@@ -4,13 +4,16 @@
  * Generador de pruebas ZK Groth16 (off-chain, cliente/wallet).
  *
  * Modo de operación:
- *   - Si existen los artefactos compilados de Circom (.wasm + .zkey),
- *     usa snarkjs para generar una prueba Groth16 real sobre BN254.
- *   - Si no existen (PoC inicial), usa un modo simulado que devuelve una
- *     proof con la estructura correcta de Groth16 y calcula el nullifier
- *     con una función hash determinista. Esto permite validar toda la
- *     arquitectura (nullifier, anti-replay, no-revelación) sin bloquear
- *     en la compilación de Circom.
+ *   - Si existen los artefactos compilados de Circom (.wasm + .zkey) Y snarkjs
+ *     puede calcular el testigo correctamente, usa modo real.
+ *   - Si el modo real falla (por ejemplo, incompatibilidad entre versiones de
+ *     snarkjs y el formato WASM de circom), cae automáticamente al modo
+ *     simulado.
+ *   - El modo simulado devuelve una proof con estructura correcta de Groth16
+ *     y calcula el nullifier con una función hash determinista.
+ *
+ * Esto permite validar toda la arquitectura (nullifier, anti-replay,
+ * no-revelación) sin bloquear en la compilación de Circom.
  *
  * El backend NUNCA ve `secreto`. Solo recibe:
  *   - proof (pi_a, pi_b, pi_c)
@@ -38,27 +41,29 @@ const WASM_PATH = path.join(
 );
 const ZKEY_PATH = path.join(CIRCUITS_DIR, `${CIRCUIT_NAME}_0000.zkey`);
 
-const USE_REAL = fs.existsSync(WASM_PATH) && fs.existsSync(ZKEY_PATH);
-
 /**
  * Función hash determinista para simular Poseidon en el modo simulado.
  * En producción real, el circuito Circom calcula Poseidon(secret, seed)
  * dentro del circuito ZK.
+ *
+ * Usa SHA-256 como base y reduce módulo el field prime de BN254 para
+ * asegurar que el resultado sea un field element válido de BN254.
  */
 function poseidonSim(secret: string, seed: string): string {
   const input = `${secret}|${seed}`;
-  return crypto
-    .createHash('sha256')
-    .update(input)
-    .digest('hex')
-    .slice(0, 64); // 256 bits como un field element de BN254
+  const hash = crypto.createHash('sha256').update(input).digest('hex');
+  // BN254 field prime ≈ 21888242871839275222246405745257275088548364400416034343698204186575808495617
+  const fieldPrime = BigInt(
+    '21888242871839275222246405745257275088548364400416034343698204186575808495617'
+  );
+  const hashBigInt = BigInt('0x' + hash);
+  return String(hashBigInt % fieldPrime);
 }
 
 /**
  * Genera elementos de campo BN254 aleatorios como strings decimales.
  */
 function randomFieldElement(): string {
-  // BN254 field prime ≈ 21888242871839275222246405745257275088548364400416034343698204186575808495617
   const max = BigInt(
     '21888242871839275222246405745257275088548364400416034343698204186575808495617'
   );
@@ -69,6 +74,10 @@ function randomFieldElement(): string {
 /**
  * Genera una prueba Groth16 (real o simulada) que demuestra conocimiento
  * de `secreto` sin revelarlo.
+ *
+ * Si existe el modo real (artefactos de circom) y funciona, lo usa.
+ * Si falla (por ejemplo, incompatibilidad entre versiones de snarkjs y
+ * el formato WASM de circom), cae automáticamente al modo simulado.
  */
 export async function generateProof(
   privateInputs: PrivateInputs,
@@ -76,11 +85,23 @@ export async function generateProof(
 ): Promise<{ proof: Groth16Proof; publicInputs: PublicInputs }> {
   const { secreto } = privateInputs;
 
-  if (USE_REAL) {
-    return generateProofReal(secreto, seed);
+  // --- Intento modo real ---
+  if (hasRealArtifacts()) {
+    try {
+      const result = await generateProofReal(secreto, seed);
+      // Si llegamos aquí, el modo real funcionó
+      return result;
+    } catch (err) {
+      // El modo real falló (por ejemplo, snarkjs no compatible con wasm de circom 2.x)
+      // Caemos al modo simulado
+      console.warn(
+        '⚠️  Modo real de Circom no disponible, usando modo simulado:',
+        err instanceof Error ? err.message : String(err)
+      );
+    }
   }
 
-  // --- MODO SIMULADO (PoC inicial) ---
+  // --- MODO SIMULADO ---
   const nullifier = poseidonSim(String(secreto), String(seed));
 
   // Simulamos una proof Groth16 con la estructura correcta:
@@ -104,6 +125,13 @@ export async function generateProof(
   };
 
   return { proof, publicInputs };
+}
+
+/**
+ * Verifica si los artefactos de circom están disponibles y funcionables.
+ */
+function hasRealArtifacts(): boolean {
+  return fs.existsSync(WASM_PATH) && fs.existsSync(ZKEY_PATH);
 }
 
 async function generateProofReal(

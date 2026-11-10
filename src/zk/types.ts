@@ -13,8 +13,8 @@ export interface Groth16Proof {
   pi_a: BigIntStr[];
   pi_b: BigIntStr[][];
   pi_c: BigIntStr[];
-  protocol: string;
-  curve: string;
+  protocol?: string;
+  curve?: string;
 }
 
 /**

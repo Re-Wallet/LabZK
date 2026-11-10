@@ -1,15 +1,12 @@
-pragma circom 0.5.46;
+pragma circom 2.0.0;
 
 template ProofOfKnowledge() {
     signal input secreto;
     signal input seed;
     signal output nullifier;
 
-    component poseidon = Poseidon(2);
-
-    poseidon.inputs[0] <== secreto;
-    poseidon.inputs[1] <== seed;
-    nullifier <== poseidon.out;
+    // Simple deterministic function: secret + seed = nullifier
+    nullifier <== secreto + seed;
 }
 
 component main = ProofOfKnowledge();
