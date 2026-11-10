@@ -19,6 +19,9 @@ import { AnchorAdapter } from '../infrastructure/adapters/ramp/anchor.adapter.js
 import { StellarPathAdapter } from '../infrastructure/adapters/path-payment/stellar-path.adapter.js';
 import { ZkLoginAdapter } from '../infrastructure/adapters/auth/zklogin.adapter.js';
 import { StellarHorizonClient } from '../infrastructure/persistence/stellar/horizon.client.js';
+import { Groth16VerifierClient } from '../infrastructure/soroban/groth16-verifier-client.js';
+import { KycRegistryClient } from '../infrastructure/soroban/kyc-registry-client.js';
+import type { SorobanVerifierConfig, KycRegistryConfig } from '../infrastructure/soroban/types.js';
 import {
   VerifyKycUseCase,
   type VerifyKycInput,
@@ -48,6 +51,13 @@ export interface AppConfig {
     circuitsUrl?: string;
   };
   horizonUrl: string;
+  soroban: {
+    rpcUrl: string;
+    networkPassphrase: string;
+    verifierContractId: string;
+    kycRegistryContractId: string;
+    verificationKeyHash: string;
+  };
 }
 
 /**
@@ -68,6 +78,9 @@ export interface Container {
   stellarPathAdapter: StellarPathAdapter;
   zkloginAdapter: ZkLoginAdapter;
   horizonClient: StellarHorizonClient;
+  // Clientes Soroban
+  groth16VerifierClient: Groth16VerifierClient;
+  kycRegistryClient: KycRegistryClient;
   // Casos de uso
   verifyKycUseCase: VerifyKycUseCase;
   authenticateUseCase: AuthenticateUseCase;
@@ -108,6 +121,21 @@ export function createContainer(config: AppConfig): Container {
   );
   const horizonClient = new StellarHorizonClient(config.horizonUrl);
 
+  // --- Clientes Soroban ---
+  const verifierConfig: SorobanVerifierConfig = {
+    contractId: config.soroban.verifierContractId,
+    rpcUrl: config.soroban.rpcUrl,
+    networkPassphrase: config.soroban.networkPassphrase,
+    verificationKeyHash: config.soroban.verificationKeyHash,
+  };
+  const kycConfig: KycRegistryConfig = {
+    contractId: config.soroban.kycRegistryContractId,
+    rpcUrl: config.soroban.rpcUrl,
+    networkPassphrase: config.soroban.networkPassphrase,
+  };
+  const groth16VerifierClient = new Groth16VerifierClient(verifierConfig);
+  const kycRegistryClient = new KycRegistryClient(kycConfig);
+
   // --- Casos de uso ---
   const verifyKycUseCase = new VerifyKycUseCase(kakushoAdapter, nullifierRepo, userRepo);
   const authenticateUseCase = new AuthenticateUseCase(zkloginAdapter);
@@ -132,6 +160,8 @@ export function createContainer(config: AppConfig): Container {
     stellarPathAdapter,
     zkloginAdapter,
     horizonClient,
+    groth16VerifierClient,
+    kycRegistryClient,
     verifyKycUseCase,
     authenticateUseCase,
     depositUseCase,
@@ -168,6 +198,13 @@ export function createContainerFromEnv(): Container {
       circuitsUrl: process.env.PIILO_CIRCUITS_URL,
     },
     horizonUrl: process.env.HORIZON_URL ?? 'https://horizon-testnet.stellar.org',
+    soroban: {
+      rpcUrl: process.env.SOROBAN_RPC_URL ?? 'https://soroban-testnet.stellar.org',
+      networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015',
+      verifierContractId: process.env.SOROBAN_VERIFIER_CONTRACT_ID ?? 'CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT',
+      kycRegistryContractId: process.env.SOROBAN_KYC_REGISTRY_CONTRACT_ID ?? '',
+      verificationKeyHash: process.env.SOROBAN_VERIFICATION_KEY_HASH ?? '',
+    },
   };
 
   return createContainer(config);

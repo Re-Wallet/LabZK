@@ -52,3 +52,12 @@ export interface SorobanVerifierConfig {
   networkPassphrase: string; // 'Testnet SDF Network ; September 2015' o mainnet
   verificationKeyHash?: string; // Hash de la verification key (para verificación ligera)
 }
+
+/**
+ * Configuración del contrato KYC Registry Soroban.
+ */
+export interface KycRegistryConfig {
+  contractId: string;
+  rpcUrl: string;
+  networkPassphrase: string;
+}

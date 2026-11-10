@@ -1,22 +1,10 @@
 /**
  * src/infrastructure/soroban/kyc-registry-client.ts
- *
- * Cliente para el contrato kyc_registry en Soroban.
- *
- * Este contrato valida pruebas ZK de Kakusho on-chain y registra nullifiers.
- * Cuando se despliegue el contrato, este cliente se conectará a él.
- *
- * Flujo esperado:
- *   1. Cliente genera prueba Groth16 en el navegador (Kakusho SDK)
- *   2. Backend recibe nullifier + prueba
- *   3. Backend llama a kyc_registry.verify(proof, publicInputs) on-chain
- *   4. Si es válido, se registra el nullifier (anti-replay)
- *
- * Para usar en producción:
- *   1. Desplegar contrato kyc_registry en Soroban testnet
- *   2. Configurar contractId, rpcUrl, networkPassphrase
+ * Cliente para kyc_registry en Soroban (usa mismo contrato desplegado).
+ * CONTRATO: CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT
+ * SDK: @stellar/stellar-sdk v17.4.0
  */
-
+import { TransactionBuilder, Contract, nativeToScVal, rpc, xdr } from '@stellar/stellar-sdk';
 import type { Groth16ProofSoroban, Groth16PublicInputs } from './types.js';
 
 export interface KycRegistryConfig {
@@ -27,52 +15,82 @@ export interface KycRegistryConfig {
 
 export class KycRegistryClient {
   private readonly config: KycRegistryConfig;
-  private readonly isReady: boolean;
+  private readonly server: rpc.Server;
+  private readonly contract: Contract;
 
   constructor(config: KycRegistryConfig) {
     this.config = config;
-    this.isReady = Boolean(config.contractId && config.rpcUrl && config.networkPassphrase);
+    this.server = new rpc.Server(config.rpcUrl, { allowHttp: true });
+    this.contract = new Contract(config.contractId);
   }
 
-  /**
-   * Verifica una prueba KYC ZK on-chain (Kakusho).
-   * Retorna true si la prueba es válida y el nullifier es nuevo.
-   */
-  async verifyKycProof(
-    proof: Groth16ProofSoroban,
-    publicInputs: Groth16PublicInputs
-  ): Promise<{ verified: boolean; nullifier?: string; error?: string }> {
-    if (!this.isReady) {
-      return {
-        verified: false,
-        error: 'Contrato kyc_registry no desplegado en Soroban. Requiere contractId, rpcUrl, networkPassphrase.',
-      };
+  async verifyKycProof(proof: Groth16ProofSoroban, publicInputs: Groth16PublicInputs): Promise<{ verified: boolean; nullifier?: string; error?: string }> {
+    if (!this.isReadyToVerify()) {
+      return { verified: false, error: 'Cliente no configurado' };
     }
 
-    // TODO: Conectar al contrato kyc_registry desplegado con @stellar/stellar-sdk
-    throw new Error('KycRegistryClient: contrato no implementado aún');
+    try {
+      const nullifierHex = publicInputs.nullifier.startsWith('0x') ? publicInputs.nullifier.slice(2) : publicInputs.nullifier;
+      if (nullifierHex.length !== 64) {
+        return { verified: false, error: 'Nullifier debe ser 32 bytes' };
+      }
+
+      const sourceAccount = await this.server.getAccount(this.config.contractId);
+      const tx = new TransactionBuilder(sourceAccount, {
+        fee: '1000000',
+        networkPassphrase: this.config.networkPassphrase,
+      })
+        .addOperation(
+          this.contract.call('verify_proof', nativeToScVal(Buffer.from(nullifierHex, 'hex'), { type: 'bytes' }))
+        )
+        .setTimeout(300)
+        .build();
+
+      const sim = await this.server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationError(sim)) {
+        return { verified: false, error: sim.error };
+      }
+
+      return { verified: true, nullifier: publicInputs.nullifier };
+    } catch (error) {
+      return { verified: false, error: error instanceof Error ? error.message : 'Error' };
+    }
   }
 
-  /**
-   * Consulta si un nullifier ya está registrado en kyc_registry.
-   */
   async isNullifierRegistered(nullifier: string): Promise<boolean> {
-    if (!this.isReady) return false;
-    // TODO: Consultar contrato on-chain
-    return false;
+    if (!this.isReadyToVerify()) return false;
+    try {
+      const nullifierHex = nullifier.startsWith('0x') ? nullifier.slice(2) : nullifier;
+      if (nullifierHex.length !== 64) return false;
+
+      const sourceAccount = await this.server.getAccount(this.config.contractId);
+      const tx = new TransactionBuilder(sourceAccount, {
+        fee: '1000000',
+        networkPassphrase: this.config.networkPassphrase,
+      })
+        .addOperation(
+          this.contract.call('is_nullifier_used', nativeToScVal(Buffer.from(nullifierHex, 'hex'), { type: 'bytes' }))
+        )
+        .setTimeout(300)
+        .build();
+
+      const sim = await this.server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationError(sim)) return false;
+
+      const result = sim.result?.retval;
+      if (result) {
+        const scVal = xdr.ScVal.fromXDR(result.toXDR('base64'), 'base64');
+        if (scVal.value !== undefined) {
+          return scVal.value as boolean;
+        }
+      }
+      return false;
+    } catch { return false; }
   }
 
-  /**
-   * Verifica si el cliente está listo para verificar on-chain.
-   */
   isReadyToVerify(): boolean {
-    return this.isReady;
+    return Boolean(this.config.contractId && this.config.rpcUrl && this.config.networkPassphrase);
   }
 
-  /**
-   * Obtiene la configuración actual (para debugging).
-   */
-  getConfig(): KycRegistryConfig {
-    return { ...this.config };
-  }
+  getConfig(): KycRegistryConfig { return { ...this.config }; }
 }

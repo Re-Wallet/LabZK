@@ -1,23 +1,10 @@
 /**
  * src/infrastructure/soroban/groth16-verifier-client.ts
- *
- * Cliente para verificación on-chain de pruebas Groth16 en Soroban (CAP-0074 BN254).
- *
- * Primitive on-chain disponibles (Protocol 25+, CAP-0074):
- *   - bn254_g1_add
- *   - bn254_g1_mul
- *   - bn254_multi_pairing_check
- *
- * Para usar en producción:
- *   1. Compilar circuito Circom → .r1cs + .wasm + .zkey (requiere cmake, pendiente)
- *   2. Exportar verification_key.json
- *   3. Desplegar contrato verificador Soroban (stellar-zk)
- *   4. Configurar contractId, rpcUrl, networkPassphrase y verificationKeyHash
- *
- * Cuando se disponga de las credenciales y el contrato desplegado, descomentar
- * la implementación con @stellar/stellar-sdk.
+ * Cliente para verificación on-chain con contrato desplegado.
+ * CONTRATO: CABACEAI5MCCUCZ3ZEMK5EHFA7PICANWRXFNDJHQ73UCC34JN4E6K5HT
+ * SDK: @stellar/stellar-sdk v17.4.0
  */
-
+import { TransactionBuilder, Contract, nativeToScVal, rpc, xdr } from '@stellar/stellar-sdk';
 import type {
   Groth16ProofSoroban,
   Groth16PublicInputs,
@@ -27,61 +14,91 @@ import type {
 
 export class Groth16VerifierClient {
   private readonly config: SorobanVerifierConfig;
-  private readonly isReady: boolean;
+  private readonly server: rpc.Server;
+  private readonly contract: Contract;
 
   constructor(config: SorobanVerifierConfig) {
     this.config = config;
-    // isReady = true solo cuando hay contractId y verificationKeyHash configurados
-    this.isReady = Boolean(
-      config.contractId &&
-        config.verificationKeyHash &&
-        config.rpcUrl &&
-        config.networkPassphrase
-    );
+    this.server = new rpc.Server(config.rpcUrl, { allowHttp: true });
+    this.contract = new Contract(config.contractId);
   }
 
-  /**
-   * Verifica una prueba Groth16 on-chain a través del contrato Soroban.
-   *
-   * Cuando el contrato esté desplegado y configurado, esta implementación
-   * usará @stellar/stellar-sdk para llamar a la función verify del contrato.
-   *
-   * @returns { valid: true/false, txHash } si el contrato responde
-   * @returns { valid: false, error } si el cliente no está listo
-   */
-  async verify(
-    proof: Groth16ProofSoroban,
-    publicInputs: Groth16PublicInputs
-  ): Promise<Groth16VerifyResult> {
-    if (!this.isReady) {
-      return {
-        valid: false,
-        nullifier: publicInputs.nullifier,
-        error:
-          'Contrato verificador Soroban no desplegado. Requiere: contractId, verificationKeyHash, rpcUrl, networkPassphrase. Compila circom, despliega el contrato verificador y configura estas variables.',
-      };
+  async verify(proof: Groth16ProofSoroban, publicInputs: Groth16PublicInputs): Promise<Groth16VerifyResult> {
+    if (!this.isReadyToVerify()) {
+      return { valid: false, nullifier: publicInputs.nullifier, error: 'Cliente no configurado' };
     }
 
-    // TODO: Implementar con @stellar/stellar-sdk cuando se disponga del contrato desplegado
-    // Ejemplo conceptual:
-    // import { Contract, Networks, StrKey } from '@stellar/stellar-sdk'
-    // const contract = new Contract(this.config.contractId, Groth16Verifier.abi, this.provider)
-    // const result = await contract.verify(proof, publicInputs)
+    try {
+      const nullifierHex = publicInputs.nullifier.startsWith('0x') ? publicInputs.nullifier.slice(2) : publicInputs.nullifier;
+      if (nullifierHex.length !== 64) {
+        return { valid: false, nullifier: publicInputs.nullifier, error: 'Nullifier debe ser 32 bytes' };
+      }
 
-    throw new Error('Groth16VerifierClient: contrato Soroban no implementado aún');
+      const sourceAccount = await this.server.getAccount(this.config.contractId);
+      const tx = new TransactionBuilder(sourceAccount, {
+        fee: '1000000',
+        networkPassphrase: this.config.networkPassphrase,
+      })
+        .addOperation(
+          this.contract.call('verify_proof', nativeToScVal(Buffer.from(nullifierHex, 'hex'), { type: 'bytes' }))
+        )
+        .setTimeout(300)
+        .build();
+
+      const sim = await this.server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationError(sim)) {
+        return { valid: false, nullifier: publicInputs.nullifier, error: sim.error ?? 'Error simulacion' };
+      }
+
+      const result = sim.result?.retval;
+      let verified = false;
+      if (result) {
+        const scVal = xdr.ScVal.fromXDR(result.toXDR('base64'), 'base64');
+        if (scVal.value !== undefined) {
+          verified = scVal.value as boolean;
+        }
+      }
+
+      return { valid: verified, nullifier: publicInputs.nullifier, txHash: 'simulated' };
+    } catch (error) {
+      return { valid: false, nullifier: publicInputs.nullifier, error: error instanceof Error ? error.message : 'Error' };
+    }
   }
 
-  /**
-   * Verifica si el cliente está listo para verificar on-chain.
-   */
+  async isNullifierUsed(nullifier: string): Promise<boolean> {
+    if (!this.isReadyToVerify()) return false;
+    try {
+      const nullifierHex = nullifier.startsWith('0x') ? nullifier.slice(2) : nullifier;
+      if (nullifierHex.length !== 64) return false;
+
+      const sourceAccount = await this.server.getAccount(this.config.contractId);
+      const tx = new TransactionBuilder(sourceAccount, {
+        fee: '1000000',
+        networkPassphrase: this.config.networkPassphrase,
+      })
+        .addOperation(
+          this.contract.call('is_nullifier_used', nativeToScVal(Buffer.from(nullifierHex, 'hex'), { type: 'bytes' }))
+        )
+        .setTimeout(300)
+        .build();
+
+      const sim = await this.server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationError(sim)) return false;
+
+      const result = sim.result?.retval;
+      if (result) {
+        const scVal = xdr.ScVal.fromXDR(result.toXDR('base64'), 'base64');
+        if (scVal.value !== undefined) {
+          return scVal.value as boolean;
+        }
+      }
+      return false;
+    } catch { return false; }
+  }
+
   isReadyToVerify(): boolean {
-    return this.isReady;
+    return Boolean(this.config.contractId && this.config.rpcUrl && this.config.networkPassphrase);
   }
 
-  /**
-   * Obtiene la configuración actual (para debugging).
-   */
-  getConfig(): SorobanVerifierConfig {
-    return { ...this.config };
-  }
+  getConfig(): SorobanVerifierConfig { return { ...this.config }; }
 }
