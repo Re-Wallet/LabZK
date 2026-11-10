@@ -196,7 +196,7 @@ Tests contra contratos reales desplegados en Stellar Testnet:
 | Atreus `get_payment_link` | `CDBOSNSY...` |
 | Anchor off-ramp SEP-24 + webhooks | — (mocked SEP-24 endpoints) |
 
-**Tests:** `tests/e2e/contracts.e2e.test.ts` — 12/12 pasando
+**Tests:** `tests/e2e/contracts.e2e.test.ts` — 19/19 pasando
 
 ---
 
@@ -424,7 +424,7 @@ psql "$DATABASE_URL" -f migrations/002_zk_layer.sql
 ### 5. Ejecutar tests
 
 ```bash
-# Todos los tests (103/103 pasando)
+# Todos los tests (110/110 pasando)
 npm test
 
 # Solo tests ZK
