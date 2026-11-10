@@ -1,0 +1,12 @@
+node_modules/
+dist/
+circuits/*.wasm
+circuits/*.zkey
+circuits/*.vtkey
+circuits/*.ptau
+circuits/*.json
+*.log
+.env
+.coverage/
+.DS_Store
+circuits/*.sym
