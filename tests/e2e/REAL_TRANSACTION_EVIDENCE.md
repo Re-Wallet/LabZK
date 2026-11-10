@@ -20,7 +20,7 @@ El Friendbot de Stellar Testnet confirmó la creación y financiación de una cu
 | Campo | Valor |
 |-------|-------|
 | Public key | `GBLGPZY7QEVKUSKGOOPUKCMW7JMQ2HMAPUB7F27MMJITOQ2VC3FPID6H` |
-| Secret key | `SAXXV4FMVDDXNPMH4KT4VGWCW3LSNXQ3J63XSHSJ6KSOYRN3RZE7RR2M` |
+| Secret key | `[OCULTO - credencial privada de testnet]` |
 | Friendbot hash | `bcc74e4da94fbfbf42593d2e9722dc6b906683f4103613fab38337d83aa152f4` |
 | Friendbot exitoso | `true` |
 | Sequence number | `24328979687145472` |
